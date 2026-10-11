@@ -7,10 +7,11 @@ import { LocalRecorder } from "./recorder";
 import { Room, type CtrlMessage, type LinkType, type LiveQuality, type PeerInfo, type PeerState } from "./room";
 import { recoverTrack } from "./tracks";
 import { FileReceiver, FileSender, type TransferProgress } from "./transfer";
-import type { Episode, Marker, Participant, TrackMeta } from "./types";
+import { LiveTranscriber, speechSupported } from "./transcribe";
+import { pausedBefore, type Episode, type Marker, type Participant, type Pause, type TrackMeta, type TranscriptLine } from "./types";
 import { nowMs, randomId } from "./util";
 
-export type RecState = "idle" | "countdown" | "recording" | "finalizing";
+export type RecState = "idle" | "countdown" | "recording" | "paused" | "finalizing";
 
 export interface PeerView {
   info: PeerInfo;
@@ -44,6 +45,8 @@ export interface StudioSnapshot {
     title: string;
     startHost: number | null;
     hostNowAtSnapshot: number;
+    pauses: Pause[];
+    targetMs: number | null;
   };
   markers: Marker[];
   transfers: TransferProgress[];
@@ -61,6 +64,14 @@ export interface StudioSnapshot {
   /** Talk time (ms) per person during the current/last recording, measured on this device. */
   talk: Record<string, number>;
   liveQuality: LiveQuality;
+  transcript: TranscriptLine[];
+  /** My own words being recognised right now. */
+  interim: string;
+  cue: { text: string; from: string; at: number } | null;
+  locked: boolean;
+  kickReason: string | null;
+  /** Who is talking right now (held ~1.5 s), for the speaker view. */
+  speaker: string | null;
 }
 
 const COUNTDOWN_MS = 3500;
@@ -112,6 +123,9 @@ export class Studio {
   private meters = new Map<string, { streamId: string; meter: ReturnType<typeof createLevelMeter> }>();
   private links = new Map<string, { type: LinkType; rttMs: number | null }>();
   private onVisibility = () => this.visibilityChanged();
+  private transcriber: LiveTranscriber | null = null;
+  private lockedAt = 0;
+  private warned = new Set<string>();
 
   constructor(
     readonly code: string,
@@ -126,7 +140,7 @@ export class Studio {
       masterId: null,
       isMaster: false,
       clock: { offset: 0, rtt: 0, synced: false },
-      rec: { state: "idle", episodeId: null, title: "", startHost: null, hostNowAtSnapshot: 0 },
+      rec: { state: "idle", episodeId: null, title: "", startHost: null, hostNowAtSnapshot: 0, pauses: [], targetMs: null },
       markers: [],
       transfers: [],
       lastEpisodeId: null,
@@ -140,6 +154,12 @@ export class Studio {
       unread: 0,
       talk: {},
       liveQuality: "normal",
+      transcript: [],
+      interim: "",
+      cue: null,
+      locked: false,
+      kickReason: null,
+      speaker: null,
     };
   }
 
@@ -224,6 +244,7 @@ export class Studio {
           clock: { offset: this.clock.offset, rtt: this.clock.rtt, synced: this.clock.synced },
           rec: { ...this.snap.rec, hostNowAtSnapshot: this.hostNow() },
         });
+        this.checkTarget();
       }, 500);
       this.recoverInterrupted();
       this.statusTimer = setInterval(() => {
@@ -243,6 +264,7 @@ export class Studio {
     if (this.tick) clearInterval(this.tick);
     if (this.statusTimer) clearInterval(this.statusTimer);
     if (this.talkTimer) clearInterval(this.talkTimer);
+    this.stopTranscriber();
     document.removeEventListener("visibilitychange", this.onVisibility);
     this.meters.forEach((m) => m.meter.dispose());
     this.meters.clear();
@@ -325,6 +347,14 @@ export class Studio {
     const eps = (await listEpisodes()).filter((e) => e.roomCode === this.code).slice(0, 10);
     this.room?.sendTo(peerId, { type: "inventory", episodes: eps.map(stripEdits) });
     if (this.snap.notes.at) this.room?.sendTo(peerId, { type: "notes", ...this.snap.notes });
+    if (this.snap.isMaster && this.snap.locked) {
+      const p = this.room?.peers.get(peerId);
+      if (p && p.info.joinedAt > this.lockedAt && !p.info.director) {
+        this.room?.broadcast({ type: "kick", to: peerId, reason: "locked" });
+        return;
+      }
+    }
+    if (this.snap.isMaster) this.room?.sendTo(peerId, { type: "room-lock", locked: this.snap.locked });
     // If we're recording and we're the master, bring the newcomer in.
     if (this.snap.isMaster && this.snap.rec.state === "recording" && this.snap.rec.episodeId) {
       const ep = await getEpisode(this.snap.rec.episodeId);
@@ -335,6 +365,8 @@ export class Studio {
           title: ep.title,
           startHost: ep.startHost,
           participants: this.participants(),
+          targetMs: ep.targetMs,
+          pauses: ep.pauses || [],
           late: true,
         });
       }
@@ -345,7 +377,22 @@ export class Studio {
   private onCtrl(msg: CtrlMessage, from: string) {
     switch (msg.type) {
       case "rec-start":
-        if (from === this.snap.masterId || msg.late) this.beginRecording(msg.episodeId, msg.title, msg.startHost, from, msg.participants);
+        if (from === this.snap.masterId || msg.late) this.beginRecording(msg.episodeId, msg.title, msg.startHost, from, msg.participants, msg.targetMs ?? null, msg.pauses || []);
+        break;
+      case "rec-pause":
+        if (this.snap.rec.episodeId === msg.episodeId) this.applyPause(msg.atHost);
+        break;
+      case "rec-resume":
+        if (this.snap.rec.episodeId === msg.episodeId) this.applyResume(msg.atHost);
+        break;
+      case "transcript":
+        this.addTranscriptLine(msg.line as TranscriptLine);
+        break;
+      case "cue":
+        if (msg.to === "all" || msg.to === this.snap.self?.peerId) this.set({ cue: { text: msg.text, from: msg.fromName || "Anfitrião", at: Date.now() } });
+        break;
+      case "room-lock":
+        if (from === this.snap.masterId) this.set({ locked: !!msg.locked });
         break;
       case "rec-stop":
         if (this.snap.rec.episodeId === msg.episodeId) this.finishRecording(msg.episodeId, msg.stopHost);
@@ -384,7 +431,7 @@ export class Studio {
         break;
       case "kick":
         if (from === this.snap.masterId && msg.to === this.snap.self?.peerId) {
-          this.set({ kicked: true });
+          this.set({ kicked: true, kickReason: msg.reason || null });
           this.leave();
         }
         break;
@@ -401,31 +448,152 @@ export class Studio {
     return this.snap.isMaster && this.snap.status === "joined";
   }
 
-  startRecording(title: string) {
+  startRecording(title: string, targetMs: number | null = null) {
     if (!this.canRecord() || this.snap.rec.state !== "idle") return;
     const episodeId = `${this.code}-${Date.now().toString(36)}`;
     const startHost = this.hostNow() + COUNTDOWN_MS;
     const participants = this.participants();
-    this.room?.broadcast({ type: "rec-start", episodeId, title, startHost, participants });
-    this.beginRecording(episodeId, title, startHost, this.snap.self!.peerId, participants);
+    this.room?.broadcast({ type: "rec-start", episodeId, title, startHost, participants, targetMs });
+    this.beginRecording(episodeId, title, startHost, this.snap.self!.peerId, participants, targetMs, []);
+  }
+
+  pauseRecording() {
+    const id = this.snap.rec.episodeId;
+    if (!this.canRecord() || !id || this.snap.rec.state !== "recording") return;
+    const atHost = this.hostNow() + 200;
+    this.room?.broadcast({ type: "rec-pause", episodeId: id, atHost });
+    this.applyPause(atHost);
+  }
+
+  resumeRecording() {
+    const id = this.snap.rec.episodeId;
+    if (!this.canRecord() || !id || this.snap.rec.state !== "paused") return;
+    const atHost = this.hostNow() + 200;
+    this.room?.broadcast({ type: "rec-resume", episodeId: id, atHost });
+    this.applyResume(atHost);
+  }
+
+  private applyPause(atHost: number) {
+    if (this.snap.rec.state !== "recording" || !this.clock) return;
+    this.recorder?.pause(this.clock.toLocal(atHost));
+    this.transcriber?.stop();
+    const pauses = [...this.snap.rec.pauses, { startHost: atHost, endHost: null }];
+    this.setRec({ state: "paused", pauses });
+    this.savePauses(pauses);
+  }
+
+  private applyResume(atHost: number) {
+    if (this.snap.rec.state !== "paused" || !this.clock) return;
+    this.recorder?.resume(this.clock.toLocal(atHost));
+    const pauses = this.snap.rec.pauses.map((p, i, all) => (i === all.length - 1 && p.endHost === null ? { ...p, endHost: atHost } : p));
+    this.setRec({ state: "recording", pauses });
+    this.savePauses(pauses);
+    this.startTranscriber();
+  }
+
+  private savePauses(pauses: Pause[]) {
+    const id = this.snap.rec.episodeId;
+    if (!id) return;
+    updateEpisode(id, (cur) => {
+      if (!cur) return cur;
+      cur.pauses = pauses;
+      return cur;
+    });
+  }
+
+  /** Episode ms right now (pauses excluded). */
+  episodeNowMs() {
+    const r = this.snap.rec;
+    if (!r.startHost) return 0;
+    const now = this.hostNow();
+    return Math.max(0, now - r.startHost - pausedBefore(r.pauses, now));
+  }
+
+  private checkTarget() {
+    const r = this.snap.rec;
+    if (!r.targetMs || r.state !== "recording") return;
+    const left = r.targetMs - this.episodeNowMs();
+    const warn = (key: string, text: string) => {
+      if (this.warned.has(key)) return;
+      this.warned.add(key);
+      this.notify(text);
+    };
+    if (left <= 5 * 60_000 && left > 60_000) warn("5", "Faltam 5 minutos para o tempo previsto.");
+    else if (left <= 60_000 && left > 0) warn("1", "Falta 1 minuto para o tempo previsto.");
+    else if (left <= 0) warn("0", "Chegaram ao tempo previsto.");
+  }
+
+  // ---------- transcription ----------
+  private startTranscriber() {
+    if (!this.snap.settings.transcribe || this.snap.director || this.snap.self?.muted || !speechSupported()) return;
+    if (this.snap.rec.state !== "recording") return;
+    if (!this.transcriber) {
+      this.transcriber = new LiveTranscriber(
+        this.snap.settings.language || "pt-PT",
+        () => this.hostNow(),
+        (text, startedAt) => {
+          const self = this.snap.self!;
+          const line: TranscriptLine = { id: randomId(8), peerId: self.peerId, name: self.name, t: startedAt, text };
+          this.room?.broadcast({ type: "transcript", line });
+          this.addTranscriptLine(line);
+        },
+        (interim) => this.set({ interim }),
+        (msg) => this.notify(msg),
+      );
+    }
+    this.transcriber.start();
+  }
+
+  private stopTranscriber() {
+    this.transcriber?.stop();
+  }
+
+  private addTranscriptLine(line: TranscriptLine) {
+    if (this.snap.transcript.some((l) => l.id === line.id)) return;
+    this.set({ transcript: [...this.snap.transcript, line].sort((a, b) => a.t - b.t) });
+    const id = this.snap.rec.episodeId || this.snap.lastEpisodeId;
+    if (!id) return;
+    updateEpisode(id, (cur) => {
+      if (!cur || (cur.transcript || []).some((l) => l.id === line.id)) return undefined;
+      cur.transcript = [...(cur.transcript || []), line].sort((a, b) => a.t - b.t);
+      return cur;
+    });
+  }
+
+  // ---------- host signals & room lock ----------
+  sendCue(to: string, text: string) {
+    if (!this.snap.isMaster) return;
+    this.room?.broadcast({ type: "cue", to, text, fromName: this.snap.self?.name });
+  }
+
+  clearCue() {
+    if (this.snap.cue) this.set({ cue: null });
+  }
+
+  setLocked(locked: boolean) {
+    if (!this.snap.isMaster) return;
+    this.lockedAt = nowMs();
+    this.set({ locked });
+    this.room?.broadcast({ type: "room-lock", locked });
   }
 
   stopRecording() {
     const id = this.snap.rec.episodeId;
-    if (!this.canRecord() || !id || (this.snap.rec.state !== "recording" && this.snap.rec.state !== "countdown")) return;
+    if (!this.canRecord() || !id || (this.snap.rec.state !== "recording" && this.snap.rec.state !== "countdown" && this.snap.rec.state !== "paused")) return;
     const stopHost = this.hostNow() + 250;
     this.room?.broadcast({ type: "rec-stop", episodeId: id, stopHost });
     this.finishRecording(id, stopHost);
   }
 
-  private async beginRecording(episodeId: string, title: string, startHost: number, hostPeerId: string, participants: Participant[]) {
+  private async beginRecording(episodeId: string, title: string, startHost: number, hostPeerId: string, participants: Participant[], targetMs: number | null = null, pauses: Pause[] = []) {
     if (this.snap.rec.state !== "idle" || !this.clock) return;
     const self = this.snap.self!;
     const recorder = this.recorder;
     this.recTitle = title;
     const actualStartHost = Math.max(startHost, this.hostNow() + 150);
-    this.setRec({ state: "countdown", episodeId, title, startHost: actualStartHost });
-    this.set({ markers: [], talk: {} });
+    this.setRec({ state: "countdown", episodeId, title, startHost: actualStartHost, pauses, targetMs });
+    this.set({ markers: [], talk: {}, transcript: [] });
+    this.warned.clear();
 
     const hasVideo = (this.snap.localStream?.getVideoTracks().length ?? 0) > 0;
     const audioId = `${episodeId}:${self.peerId}:audio`;
@@ -445,6 +613,8 @@ export class Studio {
           participants: [],
           markers: [],
           tracks: [],
+          targetMs: targetMs ?? undefined,
+          pauses,
         } as Episode);
       ep.participants = mergeParticipants(ep.participants, participants);
       if (this.snap.notes.at && (ep.notesUpdatedAt || 0) < this.snap.notes.at) {
@@ -466,18 +636,26 @@ export class Studio {
     }
     const wait = Math.max(0, this.clock.toLocal(actualStartHost) - nowMs());
     setTimeout(() => {
-      if (this.snap.rec.state === "countdown" && this.snap.rec.episodeId === episodeId) this.setRec({ state: "recording" });
+      if (this.snap.rec.state === "countdown" && this.snap.rec.episodeId === episodeId) {
+        this.setRec({ state: "recording" });
+        this.startTranscriber();
+      }
     }, wait);
   }
 
   private async finishRecording(episodeId: string, stopHost: number | undefined) {
     if (!this.clock) return;
+    this.stopTranscriber();
+    const closeAt = stopHost || this.hostNow();
+    const closedPauses = this.snap.rec.pauses.map((p) => (p.endHost === null ? { ...p, endHost: closeAt } : p));
+    this.setRec({ pauses: closedPauses });
     if (!this.recorder?.recording) {
       // Control center (or nothing to stop): just close the episode.
       if (this.snap.rec.episodeId !== episodeId || this.snap.rec.state === "idle") return;
       const ep = await updateEpisode(episodeId, (cur) => {
         if (!cur) return cur;
         cur.stopHost = Math.max(cur.stopHost || 0, stopHost || this.hostNow());
+        cur.pauses = closedPauses;
         return cur;
       });
       this.setRec({ state: "idle", startHost: null });
@@ -492,6 +670,7 @@ export class Studio {
     const ep = await updateEpisode(episodeId, (cur) => {
       if (!cur) return cur;
       cur.stopHost = Math.max(cur.stopHost || 0, stopHost || this.hostNow());
+      cur.pauses = closedPauses;
       cur.tracks = cur.tracks.map((t) => {
         if (t.peerId !== self.peerId) return t;
         if (t.kind === "audio") {
@@ -522,7 +701,7 @@ export class Studio {
   addMarker(label = "") {
     const id = this.snap.rec.episodeId;
     if (!id || this.snap.rec.state !== "recording") return;
-    const marker: Marker = { id: randomId(8), t: this.hostNow(), by: this.snap.self!.name, label: label || `Marcador ${this.snap.markers.length + 1}` };
+    const marker: Marker = { id: randomId(8), t: this.hostNow(), ms: this.episodeNowMs(), by: this.snap.self!.name, label: label || `Marcador ${this.snap.markers.length + 1}` };
     this.room?.broadcast({ type: "marker", episodeId: id, marker });
     this.addMarkerLocal(id, marker);
   }
@@ -549,6 +728,12 @@ export class Studio {
       ep.stopHost = Math.max(ep.stopHost || 0, remote.stopHost || 0) || null;
       ep.participants = mergeParticipants(ep.participants, remote.participants);
       for (const m of remote.markers) if (!ep.markers.some((x) => x.id === m.id)) ep.markers.push(m);
+      if (remote.transcript?.length) {
+        const ids = new Set((ep.transcript || []).map((l) => l.id));
+        ep.transcript = [...(ep.transcript || []), ...remote.transcript.filter((l) => !ids.has(l.id))].sort((a, b) => a.t - b.t);
+      }
+      if (remote.pauses && (!ep.pauses || remote.pauses.length > ep.pauses.length || remote.pauses.some((p) => p.endHost !== null && ep.pauses?.find((q) => q.startHost === p.startHost)?.endHost == null))) ep.pauses = remote.pauses;
+      if (remote.targetMs && !ep.targetMs) ep.targetMs = remote.targetMs;
       if ((remote.notesUpdatedAt || 0) > (ep.notesUpdatedAt || 0)) {
         ep.notes = remote.notes;
         ep.notesUpdatedAt = remote.notesUpdatedAt;
@@ -661,14 +846,19 @@ export class Studio {
     this.set({ liveQuality: q });
   }
 
-  /** Accumulate who is talking (for the host's talk-time view). */
+  private speakerSince = 0;
+
+  /** Who is talking: talk-time while recording + the active speaker for the stage. */
   private measureTalk() {
-    if (!this.ctx || this.snap.rec.state !== "recording") return;
+    if (!this.ctx) return;
     const streams: [string, MediaStream | null, boolean][] = [];
     if (this.snap.self && !this.snap.director) streams.push([this.snap.self.peerId, this.snap.localStream, this.snap.self.muted]);
     for (const p of this.snap.peers) if (!p.info.director) streams.push([p.info.peerId, p.stream, p.info.muted]);
+    const recording = this.snap.rec.state === "recording";
     let changed = false;
     const talk = { ...this.snap.talk };
+    let loudest: string | null = null;
+    let loudLevel = 0;
     for (const [id, stream, muted] of streams) {
       if (!stream || !stream.getAudioTracks().length) continue;
       let m = this.meters.get(id);
@@ -677,12 +867,28 @@ export class Studio {
         m = { streamId: stream.id, meter: createLevelMeter(stream, this.ctx) };
         this.meters.set(id, m);
       }
-      if (!muted && m.meter.read() > 0.06) {
-        talk[id] = (talk[id] || 0) + 250;
-        changed = true;
+      const level = muted ? 0 : m.meter.read();
+      if (level > 0.06) {
+        if (recording) {
+          talk[id] = (talk[id] || 0) + 250;
+          changed = true;
+        }
+        if (level > loudLevel) {
+          loudLevel = level;
+          loudest = id;
+        }
       }
     }
-    if (changed) this.set({ talk });
+    const patch: Partial<StudioSnapshot> = {};
+    if (changed) patch.talk = talk;
+    const now = performance.now();
+    if (loudest && loudest !== this.snap.speaker && now - this.speakerSince > 1500) {
+      patch.speaker = loudest;
+      this.speakerSince = now;
+    } else if (!this.snap.speaker && streams[0]) {
+      patch.speaker = streams[0][0];
+    }
+    if (Object.keys(patch).length) this.set(patch);
   }
 
   private visibilityChanged() {
@@ -748,13 +954,24 @@ export class Studio {
 
   // ---------- local controls ----------
   setMuted(muted: boolean) {
+    if (this.snap.director) return;
     this.snap.localStream?.getAudioTracks().forEach((t) => (t.enabled = !muted));
+    if (muted) this.stopTranscriber();
+    else setTimeout(() => this.startTranscriber(), 0);
     this.room?.updateSelf({ muted });
     if (this.snap.self) this.set({ self: { ...this.snap.self, muted } });
   }
 
   async applySettings(settings: CaptureSettings) {
     saveSettings(settings);
+    const prev = this.snap.settings;
+    if (settings.transcribe !== prev.transcribe || settings.language !== prev.language) {
+      this.set({ settings });
+      this.stopTranscriber();
+      this.transcriber = null;
+      if (settings.transcribe) this.startTranscriber();
+      if (onlyTranscribeChanged(prev, settings)) return;
+    }
     if (this.recorder?.recording) {
       this.set({ settings });
       return;
@@ -803,4 +1020,8 @@ function stripEdits(ep: Episode): Episode {
 
 export async function saveEpisode(ep: Episode) {
   await putEpisode(ep);
+}
+
+function onlyTranscribeChanged(a: CaptureSettings, b: CaptureSettings) {
+  return JSON.stringify({ ...a, transcribe: false, language: "" }) === JSON.stringify({ ...b, transcribe: false, language: "" });
 }

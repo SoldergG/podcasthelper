@@ -33,6 +33,8 @@ export class LocalRecorder {
   private videoStartWall = 0;
   private videoStopWall = 0;
   private videoMime = "";
+  private pausedWallMs = 0;
+  private pauseStartedWall: number | null = null;
   private stoppedResolve: (() => void) | null = null;
   private videoStopped: Promise<void> = Promise.resolve();
   private audioStartedPromise: Promise<void> = Promise.resolve();
@@ -122,6 +124,8 @@ export class LocalRecorder {
     this.videoBytes = 0;
     this.audioFrames = 0;
     this.writes = [];
+    this.pausedWallMs = 0;
+    this.pauseStartedWall = null;
 
     const node = this.node!;
     this.audioStartedPromise = new Promise<void>((resolveStarted) => {
@@ -198,6 +202,24 @@ export class LocalRecorder {
     this.writes.push(putChunk(this.audioTrackId, this.audioChunkIndex++, blob));
   }
 
+  /** Pause capture at a wall-clock instant on this device. */
+  pause(atWall: number) {
+    if (!this.recording || this.pauseStartedWall !== null) return;
+    this.pauseStartedWall = atWall;
+    this.node?.port.postMessage({ cmd: "pause", frame: this.wallToFrame(atWall) });
+    const mr = this.mr;
+    if (mr) setTimeout(() => mr.state === "recording" && mr.pause(), Math.max(0, atWall - perfToWall(performance.now())));
+  }
+
+  resume(atWall: number) {
+    if (!this.recording || this.pauseStartedWall === null) return;
+    this.pausedWallMs += Math.max(0, atWall - this.pauseStartedWall);
+    this.pauseStartedWall = null;
+    this.node?.port.postMessage({ cmd: "resume", frame: this.wallToFrame(atWall) });
+    const mr = this.mr;
+    if (mr) setTimeout(() => mr.state === "paused" && mr.resume(), Math.max(0, atWall - perfToWall(performance.now())));
+  }
+
   /** Bytes saved so far (for the host's health view). */
   get bytesWritten() {
     return this.audioBytes + this.videoBytes;
@@ -224,6 +246,10 @@ export class LocalRecorder {
     await Promise.race([audioStopped, new Promise((r) => setTimeout(r, 3000))]);
     this.flushPcm();
     if (this.mr) await this.videoStopped;
+    if (this.pauseStartedWall !== null) {
+      this.pausedWallMs += Math.max(0, this.videoStopWall - this.pauseStartedWall);
+      this.pauseStartedWall = null;
+    }
     // ondataavailable for the final chunk fires before onstop.
     await Promise.all(this.writes);
     this.recording = false;
@@ -239,7 +265,7 @@ export class LocalRecorder {
       video: this.mr
         ? {
             startLocal: this.videoStartWall,
-            durationMs: Math.max(0, this.videoStopWall - this.videoStartWall),
+            durationMs: Math.max(0, this.videoStopWall - this.videoStartWall - this.pausedWallMs),
             size: this.videoBytes,
             mime: this.videoMime,
             width: vt?.width || 0,

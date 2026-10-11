@@ -4,7 +4,7 @@ import { Compositor, type CompositorInput, type Layout } from "./compositor";
 import { mixdown, speakerActivity } from "./mix";
 import { buildSegments, editsOf, outToSrc, trackEdit } from "./timeline";
 import { trackBlob } from "./tracks";
-import type { Episode } from "./types";
+import { trackOffsetMs, type Episode } from "./types";
 
 export interface RenderOptions {
   layout: Layout;
@@ -54,7 +54,7 @@ export async function renderVideo(ep: Episode, opts: RenderOptions): Promise<Blo
       urls.push(url);
       video = await loadVideo(url);
     }
-    inputs.push({ participant: p, video, videoTrack: vt, videoOffsetMs: vt ? vt.startHost - ep.startHost : 0, edit: te, level: 0 });
+    inputs.push({ participant: p, video, videoTrack: vt, videoOffsetMs: vt ? trackOffsetMs(ep, vt, edits) : 0, edit: te, level: 0 });
   }
   if (!inputs.length) throw new Error("Não há ninguém para mostrar no vídeo.");
 

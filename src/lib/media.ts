@@ -17,6 +17,9 @@ export interface CaptureSettings {
   quality: "standard" | "high" | "max";
   /** Receive the other people's video files after recording (uses storage). */
   receiveVideo: boolean;
+  /** Live transcription of my voice with the browser speech service. */
+  transcribe: boolean;
+  language: string;
 }
 
 export const DEFAULT_SETTINGS: CaptureSettings = {
@@ -31,6 +34,8 @@ export const DEFAULT_SETTINGS: CaptureSettings = {
   mirrorPreview: true,
   quality: "high",
   receiveVideo: true,
+  transcribe: false,
+  language: "pt-PT",
 };
 
 const SETTINGS_KEY = "ph:settings";

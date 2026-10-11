@@ -26,7 +26,7 @@ import { getEpisode, updateEpisode, type PeaksRecord } from "@/lib/db";
 import { trackPeaks } from "@/lib/mix";
 import { PreviewPlayer } from "@/lib/preview";
 import { buildSegments, editsOf, outputDuration, srcToOut } from "@/lib/timeline";
-import { episodeDurationMs, type Episode, type EpisodeEdits, type TrackEdit } from "@/lib/types";
+import { episodeDurationMs, markerMs, type Episode, type EpisodeEdits, type TrackEdit } from "@/lib/types";
 import { chaptersText, equalizeGains, findSilences } from "@/lib/editor-tools";
 import { saveFile } from "@/lib/save";
 import { formatDuration, randomId, slugify } from "@/lib/util";
@@ -268,7 +268,7 @@ function Editor({ initial }: { initial: Episode }) {
   const addMarker = () => {
     const label = prompt("Nome do marcador", `Marcador ${ep.markers.length + 1}`);
     if (label === null) return;
-    patchEp({ markers: [...ep.markers, { id: randomId(8), t: ep.startHost + current, by: "editor", label }] });
+    patchEp({ markers: [...ep.markers, { id: randomId(8), t: ep.startHost + current, ms: current, by: "editor", label }] });
   };
 
   // Keyboard shortcuts
@@ -452,11 +452,11 @@ function Editor({ initial }: { initial: Episode }) {
                   ) : (
                     <ul className="mt-2 space-y-1">
                       {[...ep.markers]
-                        .sort((a, b) => a.t - b.t)
+                        .sort((a, b) => markerMs(ep, a) - markerMs(ep, b))
                         .map((m) => (
                           <li key={m.id} className="flex items-center gap-2">
-                            <button onClick={() => seek(m.t - ep.startHost)} className="flex min-w-0 flex-1 items-center gap-2 rounded-[8px] px-1.5 py-1 text-left text-[14px] hover:bg-fill">
-                              <span className="tabular rounded-md bg-[#FF9500]/15 px-1.5 py-0.5 text-[12px] font-semibold text-orange">{formatDuration(m.t - ep.startHost)}</span>
+                            <button onClick={() => seek(markerMs(ep, m))} className="flex min-w-0 flex-1 items-center gap-2 rounded-[8px] px-1.5 py-1 text-left text-[14px] hover:bg-fill">
+                              <span className="tabular rounded-md bg-[#FF9500]/15 px-1.5 py-0.5 text-[12px] font-semibold text-orange">{formatDuration(markerMs(ep, m))}</span>
                               <span className="truncate">{m.label}</span>
                             </button>
                             <button

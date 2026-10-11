@@ -4,7 +4,7 @@ import { Compositor, type CompositorInput, type Layout } from "./compositor";
 import { buildSegments, nextKeptSrc, trackEdit } from "./timeline";
 import { trackBlob } from "./tracks";
 import type { Episode, EpisodeEdits, TrackMeta } from "./types";
-import { episodeDurationMs } from "./types";
+import { episodeDurationMs, trackOffsetMs } from "./types";
 
 interface AudioLane {
   track: TrackMeta;
@@ -61,7 +61,7 @@ export class PreviewPlayer {
         analyser.fftSize = 512;
         src.connect(gain).connect(this.ctx.destination);
         gain.connect(analyser);
-        this.audio.push({ track: t, el, gain, analyser, buf: new Float32Array(512), offsetMs: t.startHost - this.ep.startHost });
+        this.audio.push({ track: t, el, gain, analyser, buf: new Float32Array(512), offsetMs: trackOffsetMs(this.ep, t, this.edits) });
       } else {
         const el = document.createElement("video");
         el.muted = true;
@@ -70,7 +70,7 @@ export class PreviewPlayer {
         el.src = url;
         el.addEventListener("seeked", () => !this.playing && this.draw());
         el.addEventListener("loadeddata", () => !this.playing && this.draw());
-        this.video.set(t.peerId, { track: t, el, offsetMs: t.startHost - this.ep.startHost });
+        this.video.set(t.peerId, { track: t, el, offsetMs: trackOffsetMs(this.ep, t, this.edits) });
       }
     }
     this.applyGains();
@@ -84,6 +84,8 @@ export class PreviewPlayer {
 
   setEdits(edits: EpisodeEdits) {
     this.edits = edits;
+    for (const a of this.audio) a.offsetMs = trackOffsetMs(this.ep, a.track, edits);
+    for (const v of this.video.values()) v.offsetMs = trackOffsetMs(this.ep, v.track, edits);
     this.applyGains();
     this.draw();
   }

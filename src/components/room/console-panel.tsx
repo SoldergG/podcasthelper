@@ -6,7 +6,8 @@ import { createLevelMeter } from "@/lib/media";
 import type { LiveQuality, PeerInfo } from "@/lib/room";
 import type { PeerView, Studio, StudioSnapshot } from "@/lib/studio";
 import { formatBytes, formatDuration } from "@/lib/util";
-import { Button, LedMeter, Pill, Segmented, type LedMeterHandle } from "../ui";
+import { Button, LedMeter, Pill, Segmented, Toggle, type LedMeterHandle } from "../ui";
+import { CueMenu } from "./cue";
 
 function useMeter(stream: MediaStream | null, ctx: AudioContext | null, muted: boolean) {
   const ref = useRef<LedMeterHandle>(null);
@@ -82,6 +83,7 @@ function Strip({
         </div>
         {snap.isMaster && !isSelf && !info.director && (
           <div className="flex gap-1">
+            <CueMenu studio={studio} to={info.peerId} label={`Enviar sinal a ${info.name}`} compact />
             {info.muted ? (
               <button onClick={() => studio.askUnmute(info.peerId)} className="key grid h-8 w-8 place-items-center rounded-[10px] text-label-2" title="Pedir para ligar o micro" aria-label={`Pedir a ${info.name} para ligar o micro`}>
                 <Volume2 className="h-4 w-4" />
@@ -191,11 +193,17 @@ export function ConsolePanel({ studio, snap }: { studio: Studio; snap: StudioSna
       </div>
 
       {snap.isMaster && (
-        <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="secondary" onClick={() => studio.muteAll()} disabled={!snap.peers.some((p) => !p.info.muted && !p.info.director)}>
-            <MicOff className="h-4 w-4" /> Silenciar todos
-          </Button>
-        </div>
+        <>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="secondary" onClick={() => studio.muteAll()} disabled={!snap.peers.some((p) => !p.info.muted && !p.info.director)}>
+              <MicOff className="h-4 w-4" /> Silenciar todos
+            </Button>
+            <CueMenu studio={studio} to="all" label="Sinal para todos" />
+          </div>
+          <div className="rounded-[14px] bg-grouped px-4 py-0.5">
+            <Toggle label="Trancar a sala" hint="Ninguém novo consegue entrar. Quem já está continua." checked={snap.locked} onChange={(v) => studio.setLocked(v)} />
+          </div>
+        </>
       )}
 
       <div>

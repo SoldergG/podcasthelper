@@ -28,6 +28,8 @@ export interface Marker {
   id: string;
   /** Host-clock ms. */
   t: number;
+  /** Episode ms, when created in the editor (otherwise derived from `t`). */
+  ms?: number;
   by: string;
   label: string;
 }
@@ -68,6 +70,26 @@ export interface TrackEdit {
   saturation: number;
   mirror: boolean;
   zoom: number; // 1..2
+  /** Manual sync nudge for this person (audio + video), ms. */
+  offsetMs: number;
+  /** Extra video-only nudge (lip sync), ms. */
+  videoOffsetMs: number;
+  /** Lower-third subtitle shown under the name in the video. */
+  subtitle: string;
+}
+
+export interface TranscriptLine {
+  id: string;
+  peerId: string;
+  name: string;
+  /** Host-clock ms when the phrase started. */
+  t: number;
+  text: string;
+}
+
+export interface Pause {
+  startHost: number;
+  endHost: number | null;
 }
 
 export interface EpisodeEdits {
@@ -92,6 +114,11 @@ export interface Episode {
   participants: Participant[];
   markers: Marker[];
   tracks: TrackMeta[];
+  /** Recording pauses (host clock). Paused time is not part of the episode. */
+  pauses?: Pause[];
+  transcript?: TranscriptLine[];
+  /** Planned length, ms. */
+  targetMs?: number;
   /** Shared show notes written during the session. */
   notes?: string;
   notesUpdatedAt?: number;
@@ -108,11 +135,41 @@ export const DEFAULT_TRACK_EDIT: TrackEdit = {
   saturation: 1,
   mirror: false,
   zoom: 1,
+  offsetMs: 0,
+  videoOffsetMs: 0,
+  subtitle: "",
 };
 
+/** Paused time (ms) between the episode start and a host-clock instant. */
+export function pausedBefore(pauses: Pause[] | undefined, host: number): number {
+  let total = 0;
+  for (const p of pauses || []) {
+    const end = Math.min(p.endHost ?? host, host);
+    if (end > p.startHost) total += end - p.startHost;
+  }
+  return total;
+}
+
+/** Host-clock instant -> episode ms (pauses removed). */
+export function hostToEp(ep: Pick<Episode, "startHost" | "pauses">, host: number): number {
+  return host - ep.startHost - pausedBefore(ep.pauses, host);
+}
+
+export function markerMs(ep: Episode, m: Marker): number {
+  return m.ms ?? hostToEp(ep, m.t);
+}
+
+/** Where a track starts on the episode timeline, including manual sync nudges. */
+export function trackOffsetMs(ep: Episode, t: TrackMeta, edits?: EpisodeEdits | null): number {
+  let off = hostToEp(ep, t.startHost);
+  const te = edits?.tracks[t.peerId];
+  if (te) off += (te.offsetMs || 0) + (t.kind === "video" ? te.videoOffsetMs || 0 : 0);
+  return off;
+}
+
 export function episodeDurationMs(ep: Episode): number {
-  if (ep.stopHost) return Math.max(0, ep.stopHost - ep.startHost);
+  if (ep.stopHost) return Math.max(0, hostToEp(ep, ep.stopHost));
   let end = 0;
-  for (const t of ep.tracks) end = Math.max(end, t.startHost - ep.startHost + t.durationMs);
+  for (const t of ep.tracks) end = Math.max(end, hostToEp(ep, t.startHost) + t.durationMs);
   return end;
 }

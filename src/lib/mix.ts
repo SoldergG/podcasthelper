@@ -4,7 +4,7 @@ import { cleanBlock, cleanupActive, cleanupPad, Limiter, noiseProfile, type Nois
 import { getPeaks, putPeaks, type PeaksRecord } from "./db";
 import { buildSegments, editsOf, outputDuration, trackEdit, type Segment } from "./timeline";
 import { trackBlob } from "./tracks";
-import { DEFAULT_CLEANUP, type AudioCleanup, type Episode, type EpisodeEdits, type TrackMeta } from "./types";
+import { DEFAULT_CLEANUP, trackOffsetMs, type AudioCleanup, type Episode, type EpisodeEdits, type TrackMeta } from "./types";
 import { floatToInt16, readFrames, readWavInfo, resampleLinear, wavHeader } from "./wav";
 
 export const MIX_RATE = 48000;
@@ -53,10 +53,10 @@ interface Source {
   profile: NoiseProfile | null;
 }
 
-async function makeSource(ep: Episode, t: TrackMeta, gain: number, cleanup: AudioCleanup): Promise<Source> {
+async function makeSource(ep: Episode, t: TrackMeta, gain: number, cleanup: AudioCleanup, edits: EpisodeEdits | null = null): Promise<Source> {
   const blob = await trackBlob(t);
   const profile = cleanupActive(cleanup) ? await noiseProfile(t) : null;
-  return { track: t, blob, info: await readWavInfo(blob), offsetMs: t.startHost - ep.startHost, gain, cleanup, profile };
+  return { track: t, blob, info: await readWavInfo(blob), offsetMs: trackOffsetMs(ep, t, edits), gain, cleanup, profile };
 }
 
 async function audioSources(ep: Episode, edits: EpisodeEdits | null): Promise<Source[]> {
@@ -67,7 +67,7 @@ async function audioSources(ep: Episode, edits: EpisodeEdits | null): Promise<So
     const te = edits ? trackEdit(edits, t.peerId) : null;
     if (te?.muted) continue;
     if (anySolo && !te?.solo) continue;
-    out.push(await makeSource(ep, t, te ? te.gain : 1, te ? te.cleanup : DEFAULT_CLEANUP));
+    out.push(await makeSource(ep, t, te ? te.gain : 1, te ? te.cleanup : DEFAULT_CLEANUP, edits));
   }
   return out;
 }
@@ -215,7 +215,7 @@ export async function alignedTrackWav(ep: Episode, track: TrackMeta, applyEdits:
   const segs = buildSegments(ep, applyEdits ? edits : null);
   const te = trackEdit(edits, track.peerId);
   if (applyCleanup && cleanupActive(te.cleanup)) {
-    const src = await makeSource(ep, track, 1, te.cleanup);
+    const src = await makeSource(ep, track, 1, te.cleanup, edits);
     const rate = src.info.sampleRate;
     const parts: BlobPart[] = [];
     let bytes = 0;
@@ -236,7 +236,7 @@ export async function alignedTrackWav(ep: Episode, track: TrackMeta, applyEdits:
   const blob = await trackBlob(track);
   const info = await readWavInfo(blob);
   const rate = info.sampleRate;
-  const offsetMs = track.startHost - ep.startHost;
+  const offsetMs = trackOffsetMs(ep, track, edits);
   const parts: BlobPart[] = [];
   let bytes = 0;
   const zeros = (frames: number) => {
@@ -270,8 +270,8 @@ export async function alignedTrackWav(ep: Episode, track: TrackMeta, applyEdits:
 
 /** Short before/after clip of one track for previewing cleanup settings. */
 export async function cleanupPreview(ep: Episode, track: TrackMeta, cleanup: AudioCleanup, srcMs: number, durMs = 8000): Promise<{ before: Blob; after: Blob }> {
-  const raw = await makeSource(ep, track, 1, DEFAULT_CLEANUP);
-  const clean = await makeSource(ep, track, 1, cleanup);
+  const raw = await makeSource(ep, track, 1, DEFAULT_CLEANUP, editsOf(ep));
+  const clean = await makeSource(ep, track, 1, cleanup, editsOf(ep));
   const rate = raw.info.sampleRate;
   const frames = Math.round((durMs / 1000) * rate);
   const startFrame = Math.round(((srcMs - raw.offsetMs) / 1000) * rate);
@@ -298,7 +298,7 @@ export async function speakerActivity(ep: Episode, applyEdits: boolean): Promise
     const pk = await trackPeaks(t);
     if (!pk) continue;
     const arr = new Float32Array(n);
-    const offset = t.startHost - ep.startHost;
+    const offset = trackOffsetMs(ep, t, edits);
     let si = 0;
     for (let i = 0; i < n; i++) {
       const outMs = (i / perSecond) * 1000;

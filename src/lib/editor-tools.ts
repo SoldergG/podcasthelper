@@ -2,7 +2,7 @@
 import { noiseProfile } from "./cleanup";
 import { trackPeaks } from "./mix";
 import { buildSegments, srcToOut, trackEdit } from "./timeline";
-import { episodeDurationMs, type CutRegion, type Episode, type EpisodeEdits } from "./types";
+import { episodeDurationMs, markerMs, trackOffsetMs, type CutRegion, type Episode, type EpisodeEdits } from "./types";
 import { formatDuration, randomId } from "./util";
 
 /**
@@ -22,7 +22,7 @@ export async function findSilences(ep: Episode, edits: EpisodeEdits, minMs = 250
     const pk = await trackPeaks(t);
     if (!pk) continue;
     any = true;
-    const offset = t.startHost - ep.startHost;
+    const offset = trackOffsetMs(ep, t, edits);
     const perBin = 1000 / pk.perSecond;
     for (let i = 0; i < pk.peaks.length; i++) {
       if (pk.peaks[i] < thr) continue;
@@ -68,7 +68,7 @@ export async function equalizeGains(ep: Episode): Promise<Record<string, number>
 export function chaptersText(ep: Episode, edits: EpisodeEdits): string {
   const segs = buildSegments(ep, edits);
   const items = ep.markers
-    .map((m) => ({ ms: srcToOut(segs, m.t - ep.startHost), label: m.label }))
+    .map((m) => ({ ms: srcToOut(segs, markerMs(ep, m)), label: m.label }))
     .filter((m): m is { ms: number; label: string } => m.ms !== null)
     .sort((a, b) => a.ms - b.ms);
   const lines: string[] = [];

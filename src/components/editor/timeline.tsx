@@ -4,7 +4,7 @@ import { Headphones, VolumeX } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PeaksRecord } from "@/lib/db";
 import { trackEdit } from "@/lib/timeline";
-import type { Episode, EpisodeEdits } from "@/lib/types";
+import { markerMs, trackOffsetMs, type Episode, type EpisodeEdits } from "@/lib/types";
 import { formatDuration } from "@/lib/util";
 
 export interface Selection {
@@ -130,8 +130,8 @@ export function Timeline({
       if (r.video) {
         g.fillStyle = r.p.color;
         g.globalAlpha = r.video.complete ? 0.25 : 0.1;
-        const vs = toX(r.video.startHost - ep.startHost);
-        const ve = toX(r.video.startHost - ep.startHost + (r.video.durationMs || duration));
+        const vs = toX(trackOffsetMs(ep, r.video, edits));
+        const ve = toX(trackOffsetMs(ep, r.video, edits) + (r.video.durationMs || duration));
         g.fillRect(Math.max(0, vs), y + ROW_H - 6, Math.min(viewW, ve) - Math.max(0, vs), 3);
         g.globalAlpha = 1;
       }
@@ -141,7 +141,7 @@ export function Timeline({
       g.fillStyle = r.p.color;
       g.globalAlpha = audible ? 0.9 : 0.25;
       if (pk && r.audio) {
-        const offset = r.audio.startHost - ep.startHost;
+        const offset = trackOffsetMs(ep, r.audio, edits);
         for (let x = 0; x < viewW; x++) {
           const msA = (x + x0) * msPerPx - offset;
           const msB = msA + msPerPx;
@@ -202,7 +202,7 @@ export function Timeline({
     }
     // Markers
     for (const m of ep.markers) {
-      const x = toX(m.t - ep.startHost);
+      const x = toX(markerMs(ep, m));
       if (x < 0 || x > viewW) continue;
       g.fillStyle = "#FF9500";
       g.beginPath();

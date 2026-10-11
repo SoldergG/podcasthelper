@@ -4,7 +4,7 @@ import { extForMime } from "./media";
 import { alignedTrackWav, mixdown } from "./mix";
 import { buildSegments, editsOf, srcToOut } from "./timeline";
 import { trackBlob } from "./tracks";
-import { episodeDurationMs, type Episode } from "./types";
+import { episodeDurationMs, markerMs, trackOffsetMs, type Episode } from "./types";
 import { formatDuration, slugify } from "./util";
 import { buildZip, type ZipEntry } from "./zip";
 
@@ -56,7 +56,7 @@ export async function exportZip(ep: Episode, opts: ZipOptions): Promise<Blob> {
   const edits = editsOf(ep);
   const segs = buildSegments(ep, opts.applyEdits ? edits : null);
   const markers = ep.markers
-    .map((m) => ({ ...m, ms: srcToOut(segs, m.t - ep.startHost) }))
+    .map((m) => ({ ...m, ms: srcToOut(segs, markerMs(ep, m)) }))
     .filter((m) => m.ms !== null)
     .sort((a, b) => a.ms! - b.ms!);
 
@@ -72,7 +72,7 @@ export async function exportZip(ep: Episode, opts: ZipOptions): Promise<Blob> {
     video: video.map((t) => ({
       file: opts.includeVideo ? `video/${nameOf(t.peerId, t.name)}.${extForMime(t.mime)}` : null,
       person: t.name,
-      offsetMs: Math.round(t.startHost - ep.startHost - (opts.applyEdits ? edits.trimStart : 0)),
+      offsetMs: Math.round(trackOffsetMs(ep, t, edits) - (opts.applyEdits ? edits.trimStart : 0)),
       width: t.width,
       height: t.height,
       durationMs: Math.round(t.durationMs),

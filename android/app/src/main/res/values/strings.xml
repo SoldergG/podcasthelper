@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">PodcastHelper</string>
+    <string name="title_activity_main">PodcastHelper</string>
+    <string name="package_name">pt.soldergg.podcasthelper</string>
+    <string name="custom_url_scheme">pt.soldergg.podcasthelper</string>
+</resources>

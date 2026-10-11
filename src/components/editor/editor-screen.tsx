@@ -28,7 +28,8 @@ import { PreviewPlayer } from "@/lib/preview";
 import { buildSegments, editsOf, outputDuration, srcToOut } from "@/lib/timeline";
 import { episodeDurationMs, type Episode, type EpisodeEdits, type TrackEdit } from "@/lib/types";
 import { chaptersText, equalizeGains, findSilences } from "@/lib/editor-tools";
-import { downloadBlob, formatDuration, randomId, slugify } from "@/lib/util";
+import { saveFile } from "@/lib/save";
+import { formatDuration, randomId, slugify } from "@/lib/util";
 import { Button, Card, Segmented, Toggle } from "../ui";
 import { ExportPanel } from "./export-panel";
 import { Timeline, type Selection } from "./timeline";
@@ -249,7 +250,11 @@ function Editor({ initial }: { initial: Episode }) {
     setToolNote("Volumes igualados: todos falam ao mesmo nível.");
   };
   const saveFrame = () => {
-    canvasRef.current?.toBlob((b) => b && downloadBlob(b, `${slugify(ep.title)}-${Math.round(current / 1000)}s.png`), "image/png");
+    canvasRef.current?.toBlob(async (b) => {
+      if (!b) return;
+      const where = await saveFile(b, `${slugify(ep.title)}-${Math.round(current / 1000)}s.png`);
+      setToolNote(`Imagem guardada em ${where}.`);
+    }, "image/png");
   };
   const copyChapters = async () => {
     try {

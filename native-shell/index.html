@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>PodcastHelper</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; min-height: 100dvh; display: grid; place-items: center; font-family: -apple-system, system-ui, sans-serif; background: #e9e9ec; color: #141417; text-align: center; padding: 24px; }
+  @media (prefers-color-scheme: dark) { body { background: #0d0d10; color: #f2f2f5; } }
+  .mark { width: 56px; height: 56px; border-radius: 16px; background: #ff5e1a; margin: 0 auto 16px; }
+  button { margin-top: 16px; height: 44px; padding: 0 20px; border-radius: 999px; border: 0; background: #ff5e1a; color: #141417; font-size: 16px; font-weight: 600; }
+</style>
+</head>
+<body>
+  <main>
+    <div class="mark"></div>
+    <h1>Sem ligação</h1>
+    <p>O PodcastHelper precisa de internet para entrar nas salas.</p>
+    <button onclick="location.href='https://podcasthelper.vercel.app'">Tentar de novo</button>
+  </main>
+</body>
+</html>

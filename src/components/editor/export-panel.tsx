@@ -7,7 +7,8 @@ import { exportZip } from "@/lib/export";
 import { mixdown } from "@/lib/mix";
 import { renderVideo } from "@/lib/render";
 import type { Episode } from "@/lib/types";
-import { downloadBlob, formatBytes, slugify } from "@/lib/util";
+import { saveFile } from "@/lib/save";
+import { formatBytes, slugify } from "@/lib/util";
 import { Button, ProgressBar, Segmented, Toggle } from "../ui";
 
 type Job = { label: string; fraction: number } | null;
@@ -39,8 +40,9 @@ export function ExportPanel({ ep, beforeExport }: { ep: Episode; beforeExport: (
     try {
       const latest = await beforeExport();
       const { blob, name } = await fn(ac.signal, latest);
-      downloadBlob(blob, name);
-      setResult(`${name} · ${formatBytes(blob.size)}`);
+      setJob({ label: "A guardar o ficheiro…", fraction: 1 });
+      const where = await saveFile(blob, name);
+      setResult(`${name} (${formatBytes(blob.size)}) guardado em ${where}`);
     } catch (e) {
       if ((e as Error).name !== "AbortError") setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -69,7 +71,7 @@ export function ExportPanel({ ep, beforeExport }: { ep: Episode; beforeExport: (
           </Button>
         </div>
       )}
-      {result && <p className="rounded-[12px] bg-[color-mix(in_srgb,var(--green-bright)_14%,transparent)] px-3 py-2 text-[13px] text-green">Descarregado: {result}</p>}
+      {result && <p className="rounded-[12px] bg-[color-mix(in_srgb,var(--green-bright)_14%,transparent)] px-3 py-2 text-[13px] text-green">{result}</p>}
       {error && <p className="rounded-[12px] bg-red-soft px-3 py-2 text-[13px] text-red">{error}</p>}
 
       <section className="rounded-[18px] bg-grouped p-4">

@@ -13,11 +13,27 @@ export interface PeerInfo {
   video: boolean;
   muted: boolean;
   recording: boolean;
+  /** Joined as control center: watches and controls, does not record. */
+  director?: boolean;
   /** Live status shared with the host. */
   syncMs?: number;
   res?: string;
   storageFreeGb?: number;
+  battery?: { level: number; charging: boolean };
+  /** App in background (phone screen off / other app). */
+  hidden?: boolean;
+  recMs?: number;
+  recBytes?: number;
 }
+
+export type LinkType = "local" | "internet" | "relay" | "unknown";
+export type LiveQuality = "high" | "normal" | "saver" | "audio";
+
+const LIVE_PROFILES: Record<Exclude<LiveQuality, "audio">, { bitrate: number; height: number }> = {
+  high: { bitrate: 2_500_000, height: 720 },
+  normal: { bitrate: 900_000, height: 540 },
+  saver: { bitrate: 300_000, height: 270 },
+};
 
 export interface PeerState {
   info: PeerInfo;
@@ -54,14 +70,13 @@ function iceServers(): RTCIceServer[] {
   return servers;
 }
 
-const LIVE_MAX_BITRATE = 900_000;
-const LIVE_MAX_HEIGHT = 540;
 
 export class Room {
   readonly peers = new Map<string, PeerState>();
   private channel: RealtimeChannel | null = null;
   private localStream: MediaStream | null = null;
   private closed = false;
+  private liveQuality: LiveQuality = "normal";
 
   // listeners
   private peerListeners = new Set<Listener<PeerState[]>>();
@@ -105,7 +120,7 @@ export class Room {
   }
 
   // ---------- lifecycle ----------
-  async join(stream: MediaStream) {
+  async join(stream: MediaStream | null) {
     this.localStream = stream;
     await this.subscribe(true);
   }
@@ -230,6 +245,33 @@ export class Room {
 
   // ---------- local media ----------
 
+  setLiveQuality(q: LiveQuality) {
+    this.liveQuality = q;
+    for (const p of this.peers.values()) this.tuneSenders(p);
+  }
+
+  /** How each peer is reached (same network, internet, relay) and the round trip. */
+  async linkInfo(peerId: string): Promise<{ type: LinkType; rttMs: number | null }> {
+    const p = this.peers.get(peerId);
+    if (!p) return { type: "unknown", rttMs: null };
+    try {
+      const stats = await p.pc.getStats();
+      let pair: RTCIceCandidatePairStats | undefined;
+      stats.forEach((r) => {
+        if (r.type === "candidate-pair" && (r as RTCIceCandidatePairStats).nominated && (r as RTCIceCandidatePairStats).state === "succeeded") pair = r as RTCIceCandidatePairStats;
+      });
+      if (!pair) return { type: "unknown", rttMs: null };
+      const local = stats.get(pair.localCandidateId) as { candidateType?: string; address?: string } | undefined;
+      const remote = stats.get(pair.remoteCandidateId) as { candidateType?: string } | undefined;
+      const rttMs = pair.currentRoundTripTime !== undefined ? Math.round(pair.currentRoundTripTime * 1000) : null;
+      if (local?.candidateType === "relay" || remote?.candidateType === "relay") return { type: "relay", rttMs };
+      if (local?.candidateType === "host" && remote?.candidateType === "host") return { type: "local", rttMs };
+      return { type: "internet", rttMs };
+    } catch {
+      return { type: "unknown", rttMs: null };
+    }
+  }
+
   async replaceLocalStream(stream: MediaStream) {
     this.localStream = stream;
     for (const p of this.peers.values()) {
@@ -251,11 +293,18 @@ export class Room {
   private tuneSenders(p: PeerState) {
     for (const sender of p.pc.getSenders()) {
       if (sender.track?.kind !== "video") continue;
-      const h = sender.track.getSettings().height || 720;
       const params = sender.getParameters();
       if (!params.encodings || !params.encodings.length) params.encodings = [{}];
-      params.encodings[0].maxBitrate = LIVE_MAX_BITRATE;
-      params.encodings[0].scaleResolutionDownBy = Math.max(1, h / LIVE_MAX_HEIGHT);
+      const enc = params.encodings[0];
+      if (this.liveQuality === "audio") {
+        enc.active = false;
+      } else {
+        const prof = LIVE_PROFILES[this.liveQuality];
+        const h = sender.track.getSettings().height || 720;
+        enc.active = true;
+        enc.maxBitrate = prof.bitrate;
+        enc.scaleResolutionDownBy = Math.max(1, h / prof.height);
+      }
       sender.setParameters(params).catch(() => {});
     }
   }

@@ -52,7 +52,7 @@ export function ExportPanel({ ep, beforeExport }: { ep: Episode; beforeExport: (
   return (
     <div className="space-y-6">
       {missing.length > 0 && (
-        <p className="rounded-[12px] bg-accent-soft px-3 py-2 text-[13px] text-accent">
+        <p className="rounded-[12px] bg-accent-soft px-3 py-2 text-[13px] text-accent-ink">
           Faltam {missing.length} faixa(s) neste aparelho ({[...new Set(missing.map((m) => m.name))].join(", ")}). Entrem na mesma sala outra vez para elas
           passarem, ou exporta só o que já tens.
         </p>
@@ -74,7 +74,7 @@ export function ExportPanel({ ep, beforeExport }: { ep: Episode; beforeExport: (
 
       <section className="rounded-[18px] bg-grouped p-4">
         <h3 className="flex items-center gap-2 text-[16px] font-semibold">
-          <FileArchive className="h-4 w-4 text-accent" /> Pacote completo (ZIP)
+          <FileArchive className="h-4 w-4 text-accent-ink" /> Pacote completo (ZIP)
         </h3>
         <p className="mt-1 text-[13px] text-label-2">Uma faixa WAV por pessoa já alinhada, vídeos, mistura, notas e marcadores. Ideal para DaVinci, Premiere, CapCut ou Audacity.</p>
         <div className="mt-2">
@@ -106,7 +106,7 @@ export function ExportPanel({ ep, beforeExport }: { ep: Episode; beforeExport: (
 
       <section className="rounded-[18px] bg-grouped p-4">
         <h3 className="flex items-center gap-2 text-[16px] font-semibold">
-          <Music className="h-4 w-4 text-accent" /> Áudio final
+          <Music className="h-4 w-4 text-accent-ink" /> Áudio final
         </h3>
         <p className="mt-1 text-[13px] text-label-2">Todos misturados, com cortes, volumes e limpeza, normalizado para cerca de -16 LUFS. Pronto para publicar.</p>
         <div className="mt-3">
@@ -128,7 +128,7 @@ export function ExportPanel({ ep, beforeExport }: { ep: Episode; beforeExport: (
 
       <section className="rounded-[18px] bg-grouped p-4">
         <h3 className="flex items-center gap-2 text-[16px] font-semibold">
-          <Film className="h-4 w-4 text-accent" /> Vídeo final
+          <Film className="h-4 w-4 text-accent-ink" /> Vídeo final
         </h3>
         <p className="mt-1 text-[13px] text-label-2">
           Gera o vídeo com todos, como aparece na pré-visualização. Demora o mesmo tempo que o episódio: deixa este separador aberto e visível.

@@ -1,6 +1,6 @@
 "use client";
 
-import { MicOff, VideoOff } from "lucide-react";
+import { EyeOff, MicOff, VideoOff } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { createLevelMeter } from "@/lib/media";
 
@@ -40,6 +40,8 @@ export function VideoTile({
   connection,
   ctx,
   badge,
+  volume = 1,
+  hidden = false,
 }: {
   stream: MediaStream | null;
   name: string;
@@ -52,10 +54,12 @@ export function VideoTile({
   connection?: string;
   ctx: AudioContext | null;
   badge?: string;
+  /** Local listening volume for remote people. */
+  volume?: number;
+  hidden?: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const ringRef = useRef<HTMLDivElement>(null);
-  const dotRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     const v = videoRef.current;
@@ -64,17 +68,20 @@ export function VideoTile({
     if (stream) v.play().catch(() => {});
   }, [stream]);
 
+  useEffect(() => {
+    if (videoRef.current && !isSelf) videoRef.current.volume = Math.max(0, Math.min(1, volume));
+  }, [volume, isSelf]);
+
   useLevelRef(stream, ctx, (level) => {
     const speaking = level > 0.06 && !muted;
     if (ringRef.current) ringRef.current.style.opacity = speaking ? "1" : "0";
-    if (dotRef.current) dotRef.current.style.transform = `scale(${1 + Math.min(1, level * 2) * 0.8})`;
   });
 
   const hasVideo = videoOn && !!stream?.getVideoTracks().length;
   const connecting = !isSelf && connection && connection !== "connected";
 
   return (
-    <div className="relative aspect-video w-full overflow-hidden rounded-[18px] bg-grouped shadow-[var(--shadow)]">
+    <div className="relative aspect-video w-full overflow-hidden rounded-[18px] bg-[#1b1b1f] shadow-[var(--shadow)]">
       <video
         ref={videoRef}
         autoPlay
@@ -84,11 +91,8 @@ export function VideoTile({
         style={mirror ? { transform: "scaleX(-1)" } : undefined}
       />
       {!hasVideo && (
-        <div className="absolute inset-0 grid place-items-center bg-elevated">
-          <div
-            className="grid h-20 w-20 place-items-center rounded-full text-[32px] font-semibold text-white sm:h-24 sm:w-24"
-            style={{ background: color }}
-          >
+        <div className="absolute inset-0 grid place-items-center bg-[#1b1b1f]">
+          <div className="grid h-20 w-20 place-items-center rounded-full text-[32px] font-semibold text-white sm:h-24 sm:w-24" style={{ background: color }}>
             {(name || "?").trim().charAt(0).toUpperCase()}
           </div>
         </div>
@@ -99,28 +103,31 @@ export function VideoTile({
         className="pointer-events-none absolute inset-0 rounded-[18px] opacity-0 transition-opacity duration-150"
         style={{ boxShadow: "inset 0 0 0 3px var(--green-bright)" }}
       />
-      <div className="absolute bottom-2.5 left-2.5 flex max-w-[calc(100%-20px)] items-center gap-1.5 rounded-full bg-black/55 py-1 pr-3 pl-2 text-[13px] font-medium text-white backdrop-blur-md">
-        <span ref={dotRef} className="h-2 w-2 shrink-0 rounded-full transition-transform" style={{ background: color }} />
+      <div className="absolute bottom-2.5 left-2.5 flex max-w-[calc(100%-20px)] items-center gap-1.5 rounded-[10px] bg-black/60 py-1 pr-2.5 pl-1.5 text-[13px] font-medium text-white backdrop-blur-md">
+        <span className="h-4 w-1 shrink-0 rounded-full" style={{ background: color }} />
         <span className="truncate">
           {name}
           {isSelf ? " (tu)" : ""}
         </span>
-        {muted && <MicOff aria-label="Micro desligado" className="h-3.5 w-3.5 shrink-0" />}
-        {!videoOn && <VideoOff aria-label="Câmara desligada" className="h-3.5 w-3.5 shrink-0" />}
+        {muted && <MicOff aria-label="Micro desligado" className="h-3.5 w-3.5 shrink-0 text-[#ff6b5f]" />}
+        {!videoOn && <VideoOff aria-label="Câmara desligada" className="h-3.5 w-3.5 shrink-0 opacity-80" />}
       </div>
-      <div className="absolute top-2.5 left-2.5 flex gap-1.5">
+      <div className="absolute top-2.5 left-2.5 flex flex-wrap gap-1.5">
         {recording && (
-          <span className="flex items-center gap-1.5 rounded-full bg-black/55 px-2.5 py-1 text-[12px] font-semibold text-white backdrop-blur-md">
+          <span className="flex items-center gap-1.5 rounded-[8px] bg-black/60 px-2 py-1 font-mono text-[11px] font-medium text-white backdrop-blur-md">
             <span className="h-2 w-2 rounded-full bg-[#ff3b30] animate-rec" />
-            A gravar
+            REC
           </span>
         )}
-        {badge && (
-          <span className="rounded-full bg-black/55 px-2.5 py-1 text-[12px] font-medium text-white backdrop-blur-md">{badge}</span>
+        {badge && <span className="rounded-[8px] bg-accent px-2 py-1 font-mono text-[11px] font-medium text-on-accent">{badge}</span>}
+        {hidden && (
+          <span className="flex items-center gap-1 rounded-[8px] bg-[#ff3b30] px-2 py-1 text-[11px] font-medium text-white">
+            <EyeOff className="h-3 w-3" /> Saiu da app
+          </span>
         )}
       </div>
       {connecting && (
-        <div className="absolute top-2.5 right-2.5 rounded-full bg-black/55 px-2.5 py-1 text-[12px] font-medium text-white backdrop-blur-md">
+        <div className="absolute top-2.5 right-2.5 rounded-[8px] bg-black/60 px-2 py-1 text-[12px] font-medium text-white backdrop-blur-md">
           {connection === "failed" ? "Sem ligação direta" : "A ligar…"}
         </div>
       )}

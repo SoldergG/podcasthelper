@@ -104,8 +104,8 @@ export async function renderVideo(ep: Episode, opts: RenderOptions): Promise<Blo
       const v = inp.video;
       if (v && inp.videoTrack) {
         const want = (srcMs - inp.videoOffsetMs) / 1000;
-        if (want >= 0 && want <= inp.videoTrack.durationMs / 1000) {
-          if (Math.abs(v.currentTime - want) > 0.3) v.currentTime = want;
+        if (want >= -1.5 && want <= inp.videoTrack.durationMs / 1000) {
+          if (Math.abs(v.currentTime - Math.max(0, want)) > 0.3) v.currentTime = Math.max(0, want);
           if (v.paused) v.play().catch(() => {});
         } else if (!v.paused) v.pause();
       }

@@ -133,10 +133,10 @@ export function TrackPanel({
                 <button
                   key={p.id}
                   onClick={() => setCleanup(p.cleanup)}
-                  className={`rounded-[14px] p-3 text-left transition ${activePreset === p.id ? "bg-accent text-white" : "bg-grouped hover:bg-fill"}`}
+                  className={`rounded-[14px] p-3 text-left transition ${activePreset === p.id ? "bg-accent text-on-accent" : "bg-grouped hover:bg-fill"}`}
                 >
                   <span className="block text-[14px] font-semibold">{p.label}</span>
-                  <span className={`block text-[12px] ${activePreset === p.id ? "text-white/80" : "text-label-3"}`}>{p.hint}</span>
+                  <span className={`block text-[12px] ${activePreset === p.id ? "text-on-accent/75" : "text-label-3"}`}>{p.hint}</span>
                 </button>
               ))}
             </div>

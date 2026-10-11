@@ -198,6 +198,11 @@ export class LocalRecorder {
     this.writes.push(putChunk(this.audioTrackId, this.audioChunkIndex++, blob));
   }
 
+  /** Bytes saved so far (for the host's health view). */
+  get bytesWritten() {
+    return this.audioBytes + this.videoBytes;
+  }
+
   /** Seconds recorded so far (for UI). */
   get elapsedMs() {
     return (this.audioFrames / this.ctx.sampleRate) * 1000;

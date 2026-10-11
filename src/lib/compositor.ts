@@ -66,7 +66,7 @@ export class Compositor {
   draw(inputs: CompositorInput[], srcMs: number, layout: Layout, nowMs = performance.now()) {
     const { ctx, width: W, height: H } = this;
     ctx.save();
-    ctx.fillStyle = "#F2F2F7";
+    ctx.fillStyle = "#121214";
     ctx.fillRect(0, 0, W, H);
     const gap = Math.round(W * 0.012);
     const radius = Math.round(W * 0.012);
@@ -95,7 +95,7 @@ export class Compositor {
         ctx.shadowColor = "rgba(0,0,0,0.25)";
         ctx.shadowBlur = gap;
         roundRect(ctx, r, radius);
-        ctx.fillStyle = "#fff";
+        ctx.fillStyle = "#1e1e22";
         ctx.fill();
         ctx.restore();
         this.drawTile(o, r, radius, srcMs, false);
@@ -115,7 +115,7 @@ export class Compositor {
 
     const v = inp.video;
     const local = srcMs - inp.videoOffsetMs;
-    const hasFrame = !!v && v.readyState >= 2 && v.videoWidth > 0 && local >= 0 && (!inp.videoTrack || local <= inp.videoTrack.durationMs + 500);
+    const hasFrame = !!v && v.readyState >= 2 && v.videoWidth > 0 && local >= -1500 && (!inp.videoTrack || local <= inp.videoTrack.durationMs + 500);
 
     if (hasFrame && v) {
       const e = inp.edit;
@@ -137,7 +137,7 @@ export class Compositor {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
     } else {
       // Audio-only card: color background + initial + live ring.
-      ctx.fillStyle = "#FFFFFF";
+      ctx.fillStyle = "#1e1e22";
       ctx.fillRect(r.x, r.y, r.w, r.h);
       const cx = r.x + r.w / 2;
       const cy = r.y + r.h / 2;

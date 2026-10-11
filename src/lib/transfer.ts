@@ -17,6 +17,8 @@ export interface TransferProgress {
   total: number;
   done: boolean;
   error?: string;
+  /** Last update (ms epoch). */
+  at?: number;
 }
 
 type ProgressFn = (p: TransferProgress) => void;

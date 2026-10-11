@@ -2,9 +2,9 @@
 // useSyncExternalStore (subscribe / getSnapshot).
 import { ClockSync } from "./clock";
 import { getEpisode, listEpisodes, putEpisode, requestPersistentStorage, storageEstimate, updateEpisode } from "./db";
-import { getMedia, keepAwake, saveSettings, type CaptureSettings } from "./media";
+import { createLevelMeter, getMedia, keepAwake, saveSettings, type CaptureSettings } from "./media";
 import { LocalRecorder } from "./recorder";
-import { Room, type CtrlMessage, type PeerInfo, type PeerState } from "./room";
+import { Room, type CtrlMessage, type LinkType, type LiveQuality, type PeerInfo, type PeerState } from "./room";
 import { recoverTrack } from "./tracks";
 import { FileReceiver, FileSender, type TransferProgress } from "./transfer";
 import type { Episode, Marker, Participant, TrackMeta } from "./types";
@@ -17,6 +17,16 @@ export interface PeerView {
   stream: MediaStream | null;
   connection: RTCPeerConnectionState;
   dataOpen: boolean;
+  link?: { type: LinkType; rttMs: number | null };
+}
+
+export interface ChatMessage {
+  id: string;
+  from: string;
+  name: string;
+  color: string;
+  text: string;
+  at: number;
 }
 
 export interface StudioSnapshot {
@@ -42,6 +52,15 @@ export interface StudioSnapshot {
   notes: { text: string; at: number; by: string };
   notice: string | null;
   kicked: boolean;
+  /** This device only watches and controls (no mic/camera, no recording). */
+  director: boolean;
+  /** Local listening volume per person (0..1), only on this device. */
+  monitor: Record<string, number>;
+  chat: ChatMessage[];
+  unread: number;
+  /** Talk time (ms) per person during the current/last recording, measured on this device. */
+  talk: Record<string, number>;
+  liveQuality: LiveQuality;
 }
 
 const COUNTDOWN_MS = 3500;
@@ -89,6 +108,10 @@ export class Studio {
   private statusTimer: ReturnType<typeof setInterval> | null = null;
   private statusTicks = 0;
   private notesTimer: ReturnType<typeof setTimeout> | null = null;
+  private talkTimer: ReturnType<typeof setInterval> | null = null;
+  private meters = new Map<string, { streamId: string; meter: ReturnType<typeof createLevelMeter> }>();
+  private links = new Map<string, { type: LinkType; rttMs: number | null }>();
+  private onVisibility = () => this.visibilityChanged();
 
   constructor(
     readonly code: string,
@@ -111,6 +134,12 @@ export class Studio {
       notes: { text: "", at: 0, by: "" },
       notice: null,
       kicked: false,
+      director: false,
+      monitor: {},
+      chat: [],
+      unread: 0,
+      talk: {},
+      liveQuality: "normal",
     };
   }
 
@@ -145,8 +174,9 @@ export class Studio {
   }
 
   // ---------- join / leave ----------
-  async join(name: string, color: string) {
+  async join(name: string, color: string, opts: { director?: boolean } = {}) {
     if (this.room) return;
+    const director = !!opts.director;
     this.set({ status: "joining", error: null });
     try {
       await requestPersistentStorage();
@@ -156,22 +186,26 @@ export class Studio {
         this.ctx = new AudioContext();
       }
       await this.ctx.resume();
-      const stream = this.snap.localStream || (await getMedia(this.snap.settings));
+      if (director) this.snap.localStream?.getTracks().forEach((t) => t.stop());
+      const stream = director ? null : this.snap.localStream || (await getMedia(this.snap.settings));
       const self: PeerInfo = {
         peerId: getPeerId(),
         name,
         color,
         role: isRoomHost(this.code) ? "host" : "guest",
         joinedAt: nowMs(),
-        video: stream.getVideoTracks().length > 0,
-        muted: false,
+        video: !!stream && stream.getVideoTracks().length > 0,
+        muted: director,
         recording: false,
+        director,
       };
       const room = new Room(this.code, self);
       this.room = room;
       this.clock = new ClockSync(room);
-      this.recorder = new LocalRecorder(this.ctx, stream, this.snap.settings);
-      await this.recorder.prepare();
+      if (stream) {
+        this.recorder = new LocalRecorder(this.ctx, stream, this.snap.settings);
+        await this.recorder.prepare();
+      }
 
       room.onPeers((list) => this.onPeers(list));
       room.onCtrl((msg, from) => this.onCtrl(msg, from));
@@ -179,7 +213,9 @@ export class Studio {
       room.onPeerConnected((peerId) => this.onPeerConnected(peerId));
 
       await room.join(stream);
-      this.set({ status: "joined", self, localStream: stream });
+      this.set({ status: "joined", self, localStream: stream, director });
+      document.addEventListener("visibilitychange", this.onVisibility);
+      this.talkTimer = setInterval(() => this.measureTalk(), 250);
       this.recomputeMaster();
       await keepAwake(true);
       this.tick = setInterval(() => {
@@ -192,7 +228,7 @@ export class Studio {
       this.recoverInterrupted();
       this.statusTimer = setInterval(() => {
         this.publishStatus();
-        if (++this.statusTicks % 3 === 0) this.syncInventory();
+        if (++this.statusTicks % 2 === 0) this.syncInventory();
       }, 5000);
       this.publishStatus();
     } catch (e) {
@@ -206,6 +242,10 @@ export class Studio {
     }
     if (this.tick) clearInterval(this.tick);
     if (this.statusTimer) clearInterval(this.statusTimer);
+    if (this.talkTimer) clearInterval(this.talkTimer);
+    document.removeEventListener("visibilitychange", this.onVisibility);
+    this.meters.forEach((m) => m.meter.dispose());
+    this.meters.clear();
     this.clock?.dispose();
     await this.room?.leave();
     this.room = null;
@@ -225,6 +265,7 @@ export class Studio {
         stream: p.stream,
         connection: p.connection,
         dataOpen: p.ctrl.readyState === "open",
+        link: this.links.get(p.info.peerId),
       })),
     });
     this.recomputeMaster();
@@ -246,7 +287,7 @@ export class Studio {
 
   private attachFileChannel(peerId: string, ch: RTCDataChannel) {
     const onProgress = (p: TransferProgress) => {
-      this.transfers.set(`${p.direction}:${p.peerId}:${p.trackId}`, p);
+      this.transfers.set(`${p.direction}:${p.peerId}:${p.trackId}`, { ...p, at: Date.now() });
       if (p.done || p.error) this.pendingWants.delete(p.trackId);
       this.set({ transfers: [...this.transfers.values()] });
     };
@@ -261,6 +302,17 @@ export class Studio {
   /** Periodic catch-up: share what we have so anyone missing a file asks again. */
   private async syncInventory() {
     if (!this.room || this.snap.rec.state !== "idle") return;
+    // Watchdog: a download with no progress for 20 s is dropped and asked again.
+    let changed = false;
+    for (const [key, t] of this.transfers) {
+      if (t.direction === "recv" && !t.done && !t.error && Date.now() - (t.at || 0) > 20_000) {
+        this.transfers.set(key, { ...t, error: "parado" });
+        this.pendingWants.delete(t.trackId);
+        changed = true;
+      }
+    }
+    for (const [id, at] of this.pendingWants) if (Date.now() - at > 30_000) this.pendingWants.delete(id);
+    if (changed) this.set({ transfers: [...this.transfers.values()] });
     const eps = (await listEpisodes()).filter((e) => e.roomCode === this.code).slice(0, 3);
     if (!eps.length) return;
     for (const p of this.snap.peers) {
@@ -322,6 +374,14 @@ export class Studio {
           this.notify("O anfitrião desligou o teu micro. Podes voltar a ligá-lo quando quiseres.");
         }
         break;
+      case "host-ask-unmute":
+        if (from === this.snap.masterId && msg.to === this.snap.self?.peerId && this.snap.self?.muted) {
+          this.notify("O anfitrião pede-te para ligares o micro.");
+        }
+        break;
+      case "chat":
+        this.receiveChat(msg as unknown as ChatMessage);
+        break;
       case "kick":
         if (from === this.snap.masterId && msg.to === this.snap.self?.peerId) {
           this.set({ kicked: true });
@@ -333,7 +393,7 @@ export class Studio {
 
   private participants(): Participant[] {
     const self = this.snap.self!;
-    return [self, ...this.snap.peers.map((p) => p.info)].map((p) => ({ peerId: p.peerId, name: p.name, color: p.color }));
+    return [self, ...this.snap.peers.map((p) => p.info)].filter((p) => !p.director).map((p) => ({ peerId: p.peerId, name: p.name, color: p.color }));
   }
 
   // ---------- recording ----------
@@ -359,12 +419,13 @@ export class Studio {
   }
 
   private async beginRecording(episodeId: string, title: string, startHost: number, hostPeerId: string, participants: Participant[]) {
-    if (this.snap.rec.state !== "idle" || !this.recorder || !this.clock) return;
+    if (this.snap.rec.state !== "idle" || !this.clock) return;
     const self = this.snap.self!;
+    const recorder = this.recorder;
     this.recTitle = title;
     const actualStartHost = Math.max(startHost, this.hostNow() + 150);
     this.setRec({ state: "countdown", episodeId, title, startHost: actualStartHost });
-    this.set({ markers: [] });
+    this.set({ markers: [], talk: {} });
 
     const hasVideo = (this.snap.localStream?.getVideoTracks().length ?? 0) > 0;
     const audioId = `${episodeId}:${self.peerId}:audio`;
@@ -391,14 +452,18 @@ export class Studio {
         ep.notesUpdatedAt = this.snap.notes.at;
       }
       const base = { episodeId, peerId: self.peerId, name: self.name, color: self.color, startHost: actualStartHost, durationMs: 0, size: 0, complete: false, local: true };
-      ep.tracks = ep.tracks.filter((t) => t.id !== audioId && t.id !== videoId);
-      ep.tracks.push({ ...base, id: audioId, kind: "audio", mime: "audio/wav", sampleRate: this.recorder!.sampleRate });
-      if (videoId) ep.tracks.push({ ...base, id: videoId, kind: "video", mime: "" });
+      if (recorder) {
+        ep.tracks = ep.tracks.filter((t) => t.id !== audioId && t.id !== videoId);
+        ep.tracks.push({ ...base, id: audioId, kind: "audio", mime: "audio/wav", sampleRate: recorder.sampleRate });
+        if (videoId) ep.tracks.push({ ...base, id: videoId, kind: "video", mime: "" });
+      }
       return ep;
     });
 
-    await this.recorder.start(this.clock.toLocal(actualStartHost), audioId, videoId);
-    this.room?.updateSelf({ recording: true });
+    if (recorder) {
+      await recorder.start(this.clock.toLocal(actualStartHost), audioId, videoId);
+      this.room?.updateSelf({ recording: true });
+    }
     const wait = Math.max(0, this.clock.toLocal(actualStartHost) - nowMs());
     setTimeout(() => {
       if (this.snap.rec.state === "countdown" && this.snap.rec.episodeId === episodeId) this.setRec({ state: "recording" });
@@ -406,7 +471,20 @@ export class Studio {
   }
 
   private async finishRecording(episodeId: string, stopHost: number | undefined) {
-    if (!this.recorder?.recording || !this.clock) return;
+    if (!this.clock) return;
+    if (!this.recorder?.recording) {
+      // Control center (or nothing to stop): just close the episode.
+      if (this.snap.rec.episodeId !== episodeId || this.snap.rec.state === "idle") return;
+      const ep = await updateEpisode(episodeId, (cur) => {
+        if (!cur) return cur;
+        cur.stopHost = Math.max(cur.stopHost || 0, stopHost || this.hostNow());
+        return cur;
+      });
+      this.setRec({ state: "idle", startHost: null });
+      this.set({ lastEpisodeId: episodeId });
+      if (ep) this.room?.broadcast({ type: "track-ready", episode: stripEdits(ep) });
+      return;
+    }
     this.setRec({ state: "finalizing" });
     const self = this.snap.self!;
     const result = await this.recorder.stop(stopHost ? this.clock.toLocal(stopHost) : undefined);
@@ -484,7 +562,7 @@ export class Studio {
         else ep.tracks.push(meta);
         const wanted = rt.kind === "audio" || settings.receiveVideo;
         const pending = this.pendingWants.get(rt.id);
-        if (rt.complete && wanted && (!pending || Date.now() - pending > 45_000)) {
+        if (rt.complete && wanted && (!pending || Date.now() - pending > 30_000)) {
           wants.push(rt.id);
           this.pendingWants.set(rt.id, Date.now());
         }
@@ -554,7 +632,76 @@ export class Studio {
     });
   }
 
+  // ---------- chat ----------
+  sendChat(text: string) {
+    const t = text.trim();
+    if (!t || !this.snap.self) return;
+    const msg: ChatMessage = { id: randomId(8), from: this.snap.self.peerId, name: this.snap.self.name, color: this.snap.self.color, text: t.slice(0, 2000), at: Date.now() };
+    this.room?.broadcast({ type: "chat", ...msg });
+    this.set({ chat: [...this.snap.chat, msg].slice(-200) });
+  }
+
+  private receiveChat(msg: ChatMessage) {
+    if (this.snap.chat.some((m) => m.id === msg.id)) return;
+    this.set({ chat: [...this.snap.chat, msg].slice(-200), unread: this.snap.unread + 1 });
+  }
+
+  markChatRead() {
+    if (this.snap.unread) this.set({ unread: 0 });
+  }
+
+  // ---------- listening ----------
+  /** Local listening volume for one person (only affects this device). */
+  setMonitor(peerId: string, volume: number) {
+    this.set({ monitor: { ...this.snap.monitor, [peerId]: Math.max(0, Math.min(1, volume)) } });
+  }
+
+  setLiveQuality(q: LiveQuality) {
+    this.room?.setLiveQuality(q);
+    this.set({ liveQuality: q });
+  }
+
+  /** Accumulate who is talking (for the host's talk-time view). */
+  private measureTalk() {
+    if (!this.ctx || this.snap.rec.state !== "recording") return;
+    const streams: [string, MediaStream | null, boolean][] = [];
+    if (this.snap.self && !this.snap.director) streams.push([this.snap.self.peerId, this.snap.localStream, this.snap.self.muted]);
+    for (const p of this.snap.peers) if (!p.info.director) streams.push([p.info.peerId, p.stream, p.info.muted]);
+    let changed = false;
+    const talk = { ...this.snap.talk };
+    for (const [id, stream, muted] of streams) {
+      if (!stream || !stream.getAudioTracks().length) continue;
+      let m = this.meters.get(id);
+      if (!m || m.streamId !== stream.id) {
+        m?.meter.dispose();
+        m = { streamId: stream.id, meter: createLevelMeter(stream, this.ctx) };
+        this.meters.set(id, m);
+      }
+      if (!muted && m.meter.read() > 0.06) {
+        talk[id] = (talk[id] || 0) + 250;
+        changed = true;
+      }
+    }
+    if (changed) this.set({ talk });
+  }
+
+  private visibilityChanged() {
+    const hidden = document.visibilityState === "hidden";
+    if (!hidden) keepAwake(true); // the wake lock is released when the page is hidden
+    this.room?.updateSelf({ hidden });
+  }
+
   // ---------- host tools ----------
+  muteAll() {
+    if (!this.snap.isMaster) return;
+    for (const p of this.snap.peers) if (!p.info.muted && !p.info.director) this.muteParticipant(p.info.peerId);
+  }
+
+  askUnmute(peerId: string) {
+    if (!this.snap.isMaster) return;
+    this.room?.sendTo(peerId, { type: "host-ask-unmute", to: peerId });
+  }
+
   muteParticipant(peerId: string) {
     if (!this.snap.isMaster) return;
     this.room?.sendTo(peerId, { type: "host-mute", to: peerId });
@@ -573,7 +720,25 @@ export class Studio {
     if (!this.room || !this.clock) return;
     const vt = this.snap.localStream?.getVideoTracks()[0]?.getSettings();
     const est = await storageEstimate();
+    let battery: PeerInfo["battery"];
+    try {
+      const nav = navigator as Navigator & { getBattery?: () => Promise<{ level: number; charging: boolean }> };
+      const b = await nav.getBattery?.();
+      if (b) battery = { level: Math.round(b.level * 100), charging: b.charging };
+    } catch {
+      /* not supported */
+    }
+    // Link type per peer, for the console.
+    for (const p of this.snap.peers) {
+      const info = await this.room.linkInfo(p.info.peerId);
+      this.links.set(p.info.peerId, info);
+    }
+    this.onPeers([...this.room.peers.values()]);
     this.room.updateSelf({
+      battery,
+      hidden: document.visibilityState === "hidden",
+      recMs: this.recorder?.recording ? Math.round(this.recorder.elapsedMs) : undefined,
+      recBytes: this.recorder?.recording ? this.recorder.bytesWritten : undefined,
       syncMs: this.clock.synced ? Math.round(this.clock.rtt / 2) : undefined,
       res: vt?.width ? `${vt.width}×${vt.height} · ${Math.round(vt.frameRate || 0)} fps` : undefined,
       storageFreeGb: est ? Math.max(0, Math.round(((est.quota - est.usage) / 1e9) * 10) / 10) : undefined,

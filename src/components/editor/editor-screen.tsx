@@ -3,6 +3,10 @@
 import {
   ArrowLeft,
   Bookmark,
+  Camera,
+  ListOrdered,
+  SlidersHorizontal,
+  WandSparkles,
   Pause,
   Play,
   Redo2,
@@ -23,7 +27,8 @@ import { trackPeaks } from "@/lib/mix";
 import { PreviewPlayer } from "@/lib/preview";
 import { buildSegments, editsOf, outputDuration, srcToOut } from "@/lib/timeline";
 import { episodeDurationMs, type Episode, type EpisodeEdits, type TrackEdit } from "@/lib/types";
-import { formatDuration, randomId } from "@/lib/util";
+import { chaptersText, equalizeGains, findSilences } from "@/lib/editor-tools";
+import { downloadBlob, formatDuration, randomId, slugify } from "@/lib/util";
 import { Button, Card, Segmented, Toggle } from "../ui";
 import { ExportPanel } from "./export-panel";
 import { Timeline, type Selection } from "./timeline";
@@ -218,6 +223,43 @@ function Editor({ initial }: { initial: Episode }) {
   };
   const updateTrack = (peerId: string, patch: Partial<TrackEdit>) =>
     setEdits((e) => ({ ...e, tracks: { ...e.tracks, [peerId]: { ...(e.tracks[peerId] || {}), ...patch } as TrackEdit } }));
+  const [toolBusy, setToolBusy] = useState<string | null>(null);
+  const [toolNote, setToolNote] = useState<string | null>(null);
+  const removeSilences = async () => {
+    setToolBusy("silence");
+    const cuts = await findSilences(ep, edits);
+    setToolBusy(null);
+    if (!cuts.length) {
+      setToolNote("Não encontrei silêncios longos (mais de 2,5 s).");
+      return;
+    }
+    const saved = cuts.reduce((n, c) => n + (c.end - c.start), 0);
+    setEdits((e) => ({ ...e, cuts: [...e.cuts, ...cuts] }));
+    setToolNote(`Cortei ${cuts.length} silêncios (${formatDuration(saved)} no total). Podes desfazer com ⌘Z.`);
+  };
+  const equalize = async () => {
+    setToolBusy("eq");
+    const gains = await equalizeGains(ep);
+    setToolBusy(null);
+    setEdits((e) => {
+      const tracks = { ...e.tracks };
+      for (const [peerId, gain] of Object.entries(gains)) tracks[peerId] = { ...(tracks[peerId] || {}), gain } as TrackEdit;
+      return { ...e, tracks };
+    });
+    setToolNote("Volumes igualados: todos falam ao mesmo nível.");
+  };
+  const saveFrame = () => {
+    canvasRef.current?.toBlob((b) => b && downloadBlob(b, `${slugify(ep.title)}-${Math.round(current / 1000)}s.png`), "image/png");
+  };
+  const copyChapters = async () => {
+    try {
+      await navigator.clipboard.writeText(chaptersText(ep, edits));
+      setToolNote("Capítulos copiados. Cola na descrição do YouTube.");
+    } catch {
+      setToolNote(chaptersText(ep, edits));
+    }
+  };
+
   const addMarker = () => {
     const label = prompt("Nome do marcador", `Marcador ${ep.markers.length + 1}`);
     if (label === null) return;
@@ -293,13 +335,18 @@ function Editor({ initial }: { initial: Episode }) {
                 <span className="font-semibold">{formatDuration(current, true)}</span>
                 <span className="text-label-3"> / {formatDuration(duration)}</span>
                 <span className="ml-2 hidden text-[12px] text-label-3 sm:inline">
-                  final {outNow !== null ? formatDuration(outNow) : "—"} de {formatDuration(finalDuration)}
+                  final {outNow !== null ? formatDuration(outNow) : "-"} de {formatDuration(finalDuration)}
                 </span>
               </div>
               <div className="ml-auto w-full sm:w-64">
                 <Segmented label="Disposição" value={layout} onChange={setLayout} options={[{ value: "grid", label: "Grelha" }, { value: "speaker", label: "Quem fala" }]} />
               </div>
             </div>
+            {toolNote && (
+              <p role="status" className="rounded-[12px] bg-accent-soft px-3 py-2 text-[13px] text-accent-ink">
+                {toolNote}
+              </p>
+            )}
             {/* Edit tools */}
             <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="secondary" onClick={() => setEdits((e) => ({ ...e, trimStart: Math.min(current, e.trimEnd ?? duration) }))}>
@@ -318,6 +365,15 @@ function Editor({ initial }: { initial: Episode }) {
               )}
               <Button size="sm" variant="secondary" onClick={addMarker}>
                 <Bookmark className="h-3.5 w-3.5" /> Marcador
+              </Button>
+              <Button size="sm" variant="secondary" onClick={removeSilences} disabled={!!toolBusy}>
+                <WandSparkles className="h-3.5 w-3.5" /> {toolBusy === "silence" ? "A procurar…" : "Remover silêncios"}
+              </Button>
+              <Button size="sm" variant="secondary" onClick={equalize} disabled={!!toolBusy}>
+                <SlidersHorizontal className="h-3.5 w-3.5" /> {toolBusy === "eq" ? "A medir…" : "Igualar volumes"}
+              </Button>
+              <Button size="sm" variant="secondary" onClick={saveFrame}>
+                <Camera className="h-3.5 w-3.5" /> Guardar imagem
               </Button>
               <div className="ml-auto flex gap-2">
                 <Button size="sm" variant="secondary" onClick={undo} disabled={!history.past.length} aria-label="Desfazer">
@@ -380,7 +436,12 @@ function Editor({ initial }: { initial: Episode }) {
                     placeholder="Notas do episódio, descrição, links…"
                     className="min-h-48 w-full resize-y rounded-[14px] bg-grouped p-3.5 text-[15px] leading-relaxed outline-none focus:ring-3 focus:ring-accent/30"
                   />
-                  <h3 className="mt-4 text-[13px] font-semibold text-label-2">Marcadores</h3>
+                  <div className="mt-4 flex items-center justify-between">
+                    <h3 className="text-[13px] font-semibold text-label-2">Marcadores</h3>
+                    <Button size="sm" variant="plain" onClick={copyChapters}>
+                      <ListOrdered className="h-3.5 w-3.5" /> Copiar capítulos
+                    </Button>
+                  </div>
                   {ep.markers.length === 0 ? (
                     <p className="mt-1 text-[13px] text-label-3">Sem marcadores. Usa o botão Marcador ou marca momentos durante a gravação.</p>
                   ) : (

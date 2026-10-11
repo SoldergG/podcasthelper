@@ -1,14 +1,16 @@
 "use client";
 
+import { ArrowRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { markRoomHost } from "@/lib/studio";
 import { newRoomCode, normalizeRoomCode } from "@/lib/util";
-import { Button, Card, Segmented, inputClass } from "./ui";
+import { Button, inputClass } from "./ui";
 
-export function StartPanel() {
+/** Create a room or join one by code. */
+export function StartActions({ size = "lg" }: { size?: "md" | "lg" }) {
   const router = useRouter();
-  const [mode, setMode] = useState<"create" | "join">("create");
+  const [joining, setJoining] = useState(false);
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -22,43 +24,36 @@ export function StartPanel() {
     e.preventDefault();
     const c = normalizeRoomCode(code);
     if (!c) {
-      setError("Código inválido. Tem 10 letras/números, por exemplo abc-defg-hij.");
+      setError("Esse código não parece certo. Tem 10 letras e números, por exemplo abc-defg-hij.");
       return;
     }
     router.push(`/sala?c=${c}`);
   };
 
   return (
-    <Card className="w-full max-w-md p-5 sm:p-6">
-      <Segmented
-        label="Começar"
-        value={mode}
-        onChange={(v) => {
-          setMode(v);
-          setError(null);
-        }}
-        options={[
-          { value: "create", label: "Criar sala" },
-          { value: "join", label: "Entrar numa sala" },
-        ]}
-      />
-      {mode === "create" ? (
-        <div className="mt-5">
-          <p className="text-[15px] text-label-2">
-            Crias a sala, partilhas o link e controlas a gravação. Não precisas de conta.
-          </p>
-          <Button size="lg" className="mt-5 w-full" onClick={create}>
-            Criar sala nova
+    <div>
+      <div className="flex flex-wrap gap-3">
+        <Button variant="accent" size={size} onClick={create}>
+          Criar sala
+        </Button>
+        {!joining && (
+          <Button variant="secondary" size={size} onClick={() => setJoining(true)}>
+            Entrar com código
           </Button>
-        </div>
-      ) : (
-        <form className="mt-5" onSubmit={join}>
-          <label className="block">
-            <span className="sr-only">Código ou link da sala</span>
+        )}
+      </div>
+      {joining && (
+        <form onSubmit={join} className="mt-4 max-w-md">
+          <label htmlFor="room-code" className="mb-2 block text-[13px] font-medium text-label-2">
+            Código ou link da sala
+          </label>
+          <div className="flex gap-2">
             <input
+              id="room-code"
               className={inputClass}
-              placeholder="Código ou link da sala"
+              placeholder="abc-defg-hij"
               value={code}
+              autoFocus
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
@@ -67,13 +62,13 @@ export function StartPanel() {
                 setError(null);
               }}
             />
-          </label>
+            <Button type="submit" variant="primary" disabled={!code.trim()} aria-label="Entrar">
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </div>
           {error && <p className="mt-2 text-[13px] text-red">{error}</p>}
-          <Button size="lg" className="mt-4 w-full" type="submit" disabled={!code.trim()}>
-            Entrar
-          </Button>
         </form>
       )}
-    </Card>
+    </div>
   );
 }

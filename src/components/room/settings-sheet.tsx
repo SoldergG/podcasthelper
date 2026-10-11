@@ -48,7 +48,7 @@ export function SettingsPanel({
   return (
     <div className="space-y-5">
       {locked && (
-        <p className="rounded-[12px] bg-accent-soft px-3 py-2 text-[13px] text-accent">
+        <p className="rounded-[12px] bg-accent-soft px-3 py-2 text-[13px] text-accent-ink">
           Durante a gravação não dá para mudar de dispositivo. As alterações aplicam-se quando parar.
         </p>
       )}

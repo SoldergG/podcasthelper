@@ -162,8 +162,8 @@ export class PreviewPlayer {
       if (!this.playing && !a.el.paused) a.el.pause();
     }
     for (const v of this.video.values()) {
-      const want = (t - v.offsetMs) / 1000;
-      const inRange = want >= 0 && want < v.track.durationMs / 1000;
+      const want = Math.max(0, (t - v.offsetMs) / 1000);
+      const inRange = t - v.offsetMs >= -1500 && want < v.track.durationMs / 1000;
       if (!inRange) {
         if (!v.el.paused) v.el.pause();
         continue;

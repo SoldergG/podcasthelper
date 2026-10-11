@@ -89,7 +89,7 @@ export async function exportZip(ep: Episode, opts: ZipOptions): Promise<Blob> {
     `Com: ${people.map((p) => p.name).join(", ")}`,
     "",
     "## Marcadores",
-    ...(markers.length ? markers.map((m) => `- ${formatDuration(m.ms!)} — ${m.label} (${m.by})`) : ["(nenhum)"]),
+    ...(markers.length ? markers.map((m) => `- ${formatDuration(m.ms!)} ${m.label} (${m.by})`) : ["(nenhum)"]),
     "",
     "## Notas",
     ep.notes?.trim() || "(sem notas)",
@@ -98,7 +98,7 @@ export async function exportZip(ep: Episode, opts: ZipOptions): Promise<Blob> {
   entries.push({ name: "notas.md", blob: new Blob([enc.encode(notes)]) });
 
   const readme = [
-    "PodcastHelper — exportação",
+    "PodcastHelper: exportação",
     "",
     "audio/      Uma faixa WAV por pessoa, já alinhadas: arrasta todas para o início da linha do tempo.",
     "video/      O vídeo original de cada pessoa (com o som da câmara, útil para sincronizar por forma de onda).",

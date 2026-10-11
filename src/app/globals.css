@@ -1,50 +1,67 @@
 @import "tailwindcss";
 
-/* Apple-style semantic tokens. Light is the primary appearance. */
+/*
+  PodcastHelper visual language: a light "studio console".
+  Aluminium greys, one signal-orange accent (with dark text on it, like hardware
+  labels), segmented LED meters and mono timecode. Shape rule: text buttons are
+  pills, transport keys are 14px rounded squares, panels 18px, inputs 12px.
+*/
 :root {
-  --bg: #f5f5f7;
-  --bg-elevated: #ffffff;
-  --bg-grouped: #f2f2f7;
-  --fill: rgba(120, 120, 128, 0.12);
-  --fill-strong: rgba(120, 120, 128, 0.2);
-  --label: #1d1d1f;
-  --label-2: rgba(60, 60, 67, 0.78);
-  --label-3: rgba(60, 60, 67, 0.6);
-  --separator: rgba(60, 60, 67, 0.16);
-  --accent: #0071e3;
-  --accent-hover: #0077ed;
-  --accent-soft: rgba(0, 113, 227, 0.1);
-  --red: #ff3b30;
-  --red-soft: rgba(255, 59, 48, 0.1);
-  --green: #248a3d;
-  --green-bright: #34c759;
-  --orange: #c93400;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 28px rgba(0, 0, 0, 0.06);
-  --glass: rgba(255, 255, 255, 0.72);
+  --bg: #e9e9ec;
+  --bg-elevated: #fbfbfc;
+  --bg-grouped: #f1f1f3;
+  --panel: #f6f6f8;
+  --fill: rgba(28, 28, 34, 0.06);
+  --fill-strong: rgba(28, 28, 34, 0.12);
+  --label: #141417;
+  --label-2: #46464e;
+  --label-3: #6b6b74;
+  --separator: rgba(28, 28, 34, 0.1);
+  --accent: #ff5e1a;
+  --accent-hover: #ff7337;
+  --accent-ink: #b33c08;
+  --on-accent: #141417;
+  --accent-soft: rgba(255, 94, 26, 0.12);
+  --red: #e5372b;
+  --red-soft: rgba(229, 55, 43, 0.1);
+  --green: #1f7a46;
+  --green-bright: #2fbf71;
+  --orange: #a84a00;
+  --amber: #f2b300;
+  --shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 1px 2px rgba(20, 20, 30, 0.06), 0 10px 30px rgba(20, 20, 30, 0.07);
+  --key-shadow: 0 1px 0 rgba(255, 255, 255, 0.95) inset, 0 -1px 0 rgba(20, 20, 30, 0.06) inset, 0 2px 3px rgba(20, 20, 30, 0.12), 0 8px 18px rgba(20, 20, 30, 0.08);
+  --glass: rgba(246, 246, 248, 0.78);
+  --led-off: rgba(28, 28, 34, 0.09);
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #000000;
-    --bg-elevated: #1c1c1e;
-    --bg-grouped: #2c2c2e;
-    --fill: rgba(120, 120, 128, 0.24);
-    --fill-strong: rgba(120, 120, 128, 0.36);
-    --label: #f5f5f7;
-    --label-2: rgba(235, 235, 245, 0.75);
-    --label-3: rgba(235, 235, 245, 0.55);
-    --separator: rgba(84, 84, 88, 0.6);
-    --accent: #2997ff;
-    --accent-hover: #47a6ff;
-    --accent-soft: rgba(41, 151, 255, 0.16);
-    --red: #ff453a;
-    --red-soft: rgba(255, 69, 58, 0.16);
-    --green: #30d158;
-    --green-bright: #30d158;
-    --orange: #ff9f0a;
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 28px rgba(0, 0, 0, 0.4);
-    --glass: rgba(28, 28, 30, 0.72);
+    --bg: #0d0d10;
+    --bg-elevated: #1b1b1f;
+    --bg-grouped: #232328;
+    --panel: #16161a;
+    --fill: rgba(235, 235, 245, 0.08);
+    --fill-strong: rgba(235, 235, 245, 0.15);
+    --label: #f2f2f5;
+    --label-2: #b9b9c2;
+    --label-3: #8c8c96;
+    --separator: rgba(235, 235, 245, 0.1);
+    --accent: #ff6a2b;
+    --accent-hover: #ff814b;
+    --accent-ink: #ff8a57;
+    --on-accent: #141417;
+    --accent-soft: rgba(255, 106, 43, 0.16);
+    --red: #ff4d40;
+    --red-soft: rgba(255, 77, 64, 0.16);
+    --green: #44d98a;
+    --green-bright: #44d98a;
+    --orange: #ffad5c;
+    --amber: #ffc935;
+    --shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 10px 30px rgba(0, 0, 0, 0.45);
+    --key-shadow: 0 1px 0 rgba(255, 255, 255, 0.07) inset, 0 2px 4px rgba(0, 0, 0, 0.5), 0 8px 18px rgba(0, 0, 0, 0.35);
+    --glass: rgba(22, 22, 26, 0.78);
+    --led-off: rgba(235, 235, 245, 0.08);
     color-scheme: dark;
   }
 }
@@ -53,6 +70,7 @@
   --color-bg: var(--bg);
   --color-elevated: var(--bg-elevated);
   --color-grouped: var(--bg-grouped);
+  --color-panel: var(--panel);
   --color-fill: var(--fill);
   --color-fill-strong: var(--fill-strong);
   --color-label: var(--label);
@@ -61,15 +79,17 @@
   --color-separator: var(--separator);
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
+  --color-accent-ink: var(--accent-ink);
+  --color-on-accent: var(--on-accent);
   --color-accent-soft: var(--accent-soft);
   --color-red: var(--red);
   --color-red-soft: var(--red-soft);
   --color-green: var(--green);
   --color-green-bright: var(--green-bright);
   --color-orange: var(--orange);
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", "Segoe UI", Roboto, Arial, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
-  --shadow-card: var(--shadow);
+  --color-amber: var(--amber);
+  --font-sans: var(--font-geist), -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, monospace;
 }
 
 html {
@@ -80,9 +100,8 @@ body {
   background: var(--bg);
   color: var(--label);
   font-family: var(--font-sans);
-  font-feature-settings: "kern";
   -webkit-font-smoothing: antialiased;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.011em;
 }
 
 ::selection {
@@ -90,21 +109,57 @@ body {
 }
 
 :focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
 .glass {
   background: var(--glass);
-  backdrop-filter: saturate(180%) blur(20px);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(160%) blur(18px);
+  -webkit-backdrop-filter: saturate(160%) blur(18px);
+}
+@media (prefers-reduced-transparency: reduce) {
+  .glass {
+    background: var(--panel);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
 }
 
 .tabular {
   font-variant-numeric: tabular-nums;
 }
 
-/* Range input, Apple-like */
+/* Hardware key: a rounded square that physically presses. */
+.key {
+  background: var(--bg-elevated);
+  box-shadow: var(--key-shadow);
+  transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+.key:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 1px rgba(20, 20, 30, 0.1);
+}
+.key[aria-pressed="true"] {
+  background: var(--label);
+  color: var(--bg-elevated);
+}
+
+/* Subtle milled texture for console panels (static, no repaint cost). */
+.console {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 40%),
+    var(--panel);
+}
+@media (prefers-color-scheme: dark) {
+  .console {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0) 40%),
+      var(--panel);
+  }
+}
+
+/* Range input as a console fader. */
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
@@ -118,13 +173,13 @@ input[type="range"]::-webkit-slider-runnable-track {
 }
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 22px;
+  width: 14px;
   height: 22px;
   margin-top: -9px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 0.5px 4px rgba(0, 0, 0, 0.12), 0 6px 13px rgba(0, 0, 0, 0.12);
-  border: 0.5px solid rgba(0, 0, 0, 0.04);
+  border-radius: 4px;
+  background: linear-gradient(180deg, #ffffff, #e6e6ea);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25), inset 0 -1px 0 rgba(0, 0, 0, 0.08);
+  border: 0.5px solid rgba(0, 0, 0, 0.15);
 }
 input[type="range"]::-moz-range-track {
   height: 4px;
@@ -132,12 +187,12 @@ input[type="range"]::-moz-range-track {
   background: var(--fill-strong);
 }
 input[type="range"]::-moz-range-thumb {
-  width: 22px;
+  width: 14px;
   height: 22px;
-  border-radius: 50%;
-  background: #fff;
-  border: none;
-  box-shadow: 0 0.5px 4px rgba(0, 0, 0, 0.12), 0 6px 13px rgba(0, 0, 0, 0.12);
+  border-radius: 4px;
+  background: linear-gradient(180deg, #ffffff, #e6e6ea);
+  border: 0.5px solid rgba(0, 0, 0, 0.15);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
 }
 
 @keyframes pulse-rec {
@@ -149,14 +204,23 @@ input[type="range"]::-moz-range-thumb {
 }
 
 @keyframes countdown-pop {
-  0% { transform: scale(0.6); opacity: 0; }
-  30% { transform: scale(1.05); opacity: 1; }
+  0% { transform: scale(0.7); opacity: 0; }
+  35% { transform: scale(1.04); opacity: 1; }
   100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+.rise {
+  animation: rise 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
 }

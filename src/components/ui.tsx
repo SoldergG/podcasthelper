@@ -43,17 +43,18 @@ export function Key({
   tone = "default",
   showLabel = false,
   className = "",
+  wrapperClassName = "",
   children,
   ...rest
-}: ButtonHTMLAttributes<HTMLButtonElement> & { label: string; pressed?: boolean; tone?: "default" | "danger" | "accent"; showLabel?: boolean }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & { label: string; pressed?: boolean; tone?: "default" | "danger" | "accent"; showLabel?: boolean; wrapperClassName?: string }) {
   const toneClass = tone === "danger" ? "!bg-red !text-white" : tone === "accent" ? "!bg-accent !text-on-accent" : "";
   return (
-    <span className="inline-flex flex-col items-center gap-1">
+    <span className={`${wrapperClassName || "inline-flex"} shrink-0 flex-col items-center gap-1`}>
       <button
         aria-label={label}
         title={label}
         aria-pressed={pressed}
-        className={`key inline-flex h-12 w-12 items-center justify-center rounded-[14px] text-label disabled:opacity-35 ${toneClass} ${className}`}
+        className={`key inline-flex h-11 w-11 items-center justify-center rounded-[13px] text-label disabled:opacity-35 sm:h-12 sm:w-12 sm:rounded-[14px] ${toneClass} ${className}`}
         {...rest}
       >
         {children}

@@ -259,7 +259,8 @@ type SidePanel = "console" | "notes" | "chat" | "tests";
 
 function InRoom({ studio, code }: { studio: Studio; code: string }) {
   const snap = useSyncExternalStore(studio.subscribe, studio.getSnapshot, studio.getSnapshot);
-  const [sheet, setSheet] = useState<null | "settings" | "invite" | "title" | SidePanel>(null);
+  const [sheet, setSheet] = useState<null | "settings" | "invite" | "title" | "panels" | SidePanel>(null);
+  const [mobileTab, setMobileTab] = useState<SidePanel | "settings">("console");
   const [panel, setPanel] = useState<SidePanel>("console");
   const [title, setTitle] = useState(() => `Episódio de ${new Date().toLocaleDateString("pt-PT", { day: "numeric", month: "long" })}`);
   const [now, setNow] = useState(() => nowMs());
@@ -470,7 +471,7 @@ function InRoom({ studio, code }: { studio: Studio; code: string }) {
             (rec.state === "idle" ? (
               <button
                 onClick={() => setSheet("title")}
-                className="flex h-12 shrink-0 items-center gap-2 rounded-[14px] bg-accent px-5 text-[15px] font-semibold text-on-accent shadow-[var(--key-shadow)] transition active:translate-y-px"
+                className="flex h-11 shrink-0 items-center gap-2 rounded-[13px] bg-accent px-4 sm:h-12 sm:rounded-[14px] sm:px-5 text-[15px] font-semibold text-on-accent shadow-[var(--key-shadow)] transition active:translate-y-px"
               >
                 <span className="h-3 w-3 rounded-full bg-red" /> Gravar
               </button>
@@ -478,7 +479,7 @@ function InRoom({ studio, code }: { studio: Studio; code: string }) {
               <button
                 onClick={() => studio.stopRecording()}
                 disabled={rec.state === "finalizing"}
-                className="flex h-12 shrink-0 items-center gap-2 rounded-[14px] bg-label px-5 text-[15px] font-semibold text-bg shadow-[var(--key-shadow)] transition active:translate-y-px disabled:opacity-50"
+                className="flex h-11 shrink-0 items-center gap-2 rounded-[13px] bg-label px-4 sm:h-12 sm:rounded-[14px] sm:px-5 text-[15px] font-semibold text-bg shadow-[var(--key-shadow)] transition active:translate-y-px disabled:opacity-50"
               >
                 <span className="h-3 w-3 rounded-[3px] bg-red" /> Parar
               </button>
@@ -487,25 +488,19 @@ function InRoom({ studio, code }: { studio: Studio; code: string }) {
           <Key label="Marcar momento (B)" disabled={!recording} onClick={() => studio.addMarker()}>
             <Bookmark className="h-5 w-5" />
           </Key>
-          <Key label="Consola" className="lg:hidden" onClick={() => setSheet("console")}>
-            <LayoutDashboard className="h-5 w-5" />
-          </Key>
-          <Key label="Notas" className="lg:hidden" onClick={() => setSheet("notes")}>
-            <NotebookPen className="h-5 w-5" />
-          </Key>
           <span className="relative lg:hidden">
-            <Key label="Chat" onClick={() => setSheet("chat")}>
-              <MessageSquare className="h-5 w-5" />
+            <Key label="Painéis" onClick={() => setSheet("panels")}>
+              <LayoutDashboard className="h-5 w-5" />
             </Key>
             {snap.unread > 0 && (
               <span className="absolute -top-1 -right-1 grid h-5 min-w-5 place-items-center rounded-full bg-accent px-1 font-mono text-[11px] text-on-accent">{snap.unread}</span>
             )}
           </span>
-          <Key label="Testes (T)" className="lg:hidden" onClick={() => setSheet("tests")}>
+          <Key label="Testes (T)" wrapperClassName="hidden lg:inline-flex" onClick={() => setSheet("tests")}>
             <Gauge className="h-5 w-5" />
           </Key>
           {!director && (
-            <Key label="Definições" onClick={() => setSheet("settings")}>
+            <Key label="Definições" wrapperClassName="hidden lg:inline-flex" onClick={() => setSheet("settings")}>
               <Settings2 className="h-5 w-5" />
             </Key>
           )}
@@ -530,6 +525,29 @@ function InRoom({ studio, code }: { studio: Studio; code: string }) {
         </Sheet>
       )}
       {sheet === "invite" && <InviteSheet code={code} onClose={() => setSheet(null)} />}
+      {sheet === "panels" && (
+        <Sheet title="Painéis" onClose={() => setSheet(null)}>
+          <Segmented
+            label="Painel"
+            value={mobileTab}
+            onChange={setMobileTab}
+            options={[
+              { value: "console", label: "Consola" },
+              { value: "notes", label: "Notas" },
+              { value: "chat", label: snap.unread && mobileTab !== "chat" ? `Chat (${snap.unread})` : "Chat" },
+              { value: "tests", label: "Testes" },
+              ...(director ? [] : [{ value: "settings" as const, label: "Ajustes" }]),
+            ]}
+          />
+          <div className="mt-4">
+            {mobileTab === "settings" ? (
+              <SettingsPanel settings={snap.settings} onChange={(s) => studio.applySettings(s)} stream={snap.localStream} locked={rec.state !== "idle"} />
+            ) : (
+              panelContent(mobileTab)
+            )}
+          </div>
+        </Sheet>
+      )}
       {(sheet === "console" || sheet === "notes" || sheet === "chat" || sheet === "tests") && (
         <Sheet title={sheet === "console" ? "Consola" : sheet === "notes" ? "Notas partilhadas" : sheet === "chat" ? "Chat" : "Testes"} onClose={() => setSheet(null)}>
           {panelContent(sheet)}

@@ -22,6 +22,19 @@
 5. **Editor no navegador:** ondas de som por pessoa, cortes, início/fim, volumes, mute/solo, marcadores, notas, limpeza de áudio (redução de ruído espectral, foco na voz, filtro de graves, compressor) e ajustes de imagem.
 6. **Exportar:** ZIP com uma faixa WAV alinhada por pessoa + vídeos + mistura + `sync.json`; áudio final em MP3/WAV normalizado a −16 LUFS; vídeo final em grelha ou com quem fala em destaque.
 
+<p align="center">
+  <img src="public/screens/editor.webp" alt="Editor com a linha do tempo e a onda de som de cada pessoa" width="900">
+</p>
+
+## Funcionalidades
+
+- **Sala do anfitrião:** consola com medidor de cada pessoa, volume de escuta, tempo de fala, bateria, espaço livre e tipo de ligação; silenciar, remover, enviar sinais, trancar a sala, pausar e retomar a gravação em todos.
+- **Centro de controlo:** um computador entra só para ver as câmaras e controlar, sem gravar.
+- **Testes:** micro (nível, picos, ruído de fundo, gravar e ouvir), câmara (luz, enquadramento), ligação e aparelho.
+- **Notas, chat e transcrição ao vivo** partilhados na sala.
+- **Editor:** cortes, remover silêncios, igualar volumes, limpeza de ruído, foco na voz, acerto de sincronia por pessoa, marcadores e capítulos.
+- **Exportar:** ZIP com faixas alinhadas, MP3/WAV a -16 LUFS, vídeo em grelha ou orador, clips 9:16 e 1:1, legendas SRT.
+
 ## Stack
 
 - Next.js 16 (App Router, páginas estáticas) + Tailwind CSS v4
@@ -41,19 +54,6 @@ npm run dev
 
 Abre `http://localhost:3000` em dois separadores (ou dois aparelhos na mesma rede) para testar.
 O micro e a câmara só funcionam em `https://` ou em `localhost`.
-
-<p align="center">
-  <img src="public/screens/editor.webp" alt="Editor com a linha do tempo e a onda de som de cada pessoa" width="900">
-</p>
-
-## Funcionalidades
-
-- **Sala do anfitrião:** consola com medidor de cada pessoa, volume de escuta, tempo de fala, bateria, espaço livre e tipo de ligação; silenciar, remover, enviar sinais, trancar a sala, pausar e retomar a gravação em todos.
-- **Centro de controlo:** um computador entra só para ver as câmaras e controlar, sem gravar.
-- **Testes:** micro (nível, picos, ruído de fundo, gravar e ouvir), câmara (luz, enquadramento), ligação e aparelho.
-- **Notas, chat e transcrição ao vivo** partilhados na sala.
-- **Editor:** cortes, remover silêncios, igualar volumes, limpeza de ruído, foco na voz, acerto de sincronia por pessoa, marcadores e capítulos.
-- **Exportar:** ZIP com faixas alinhadas, MP3/WAV a -16 LUFS, vídeo em grelha ou orador, clips 9:16 e 1:1, legendas SRT.
 
 ## Limitações conhecidas
 

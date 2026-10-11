@@ -193,7 +193,7 @@ export function InRoom({ studio, code }: { studio: Studio; code: string }) {
               <UserPlus className="h-3.5 w-3.5 shrink-0" />
             </button>
           </div>
-          <div className="relative flex items-center gap-3 overflow-hidden rounded-[12px] border border-separator bg-elevated px-3.5 py-1.5 shadow-[var(--shadow)]" aria-live="polite">
+          <div className="relative flex items-center gap-3 overflow-hidden rounded-[12px] border border-separator bg-elevated px-3.5 py-1.5" aria-live="polite">
             <span className={`h-2.5 w-2.5 rounded-full ${recording ? "bg-red animate-rec" : paused ? "bg-amber" : rec.state === "idle" ? "bg-green-bright" : "bg-amber"}`} />
             <span className="font-mono text-[22px] font-medium leading-none tracking-tight tabular">{formatDuration(elapsed)}</span>
             <span className="hidden font-mono text-[11px] text-label-3 sm:inline">
@@ -289,7 +289,7 @@ export function InRoom({ studio, code }: { studio: Studio; code: string }) {
 
       {/* Dock */}
       <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 pb-[max(14px,env(safe-area-inset-bottom))]">
-        <div className="glass pointer-events-auto mx-auto flex w-fit max-w-[calc(100%-12px)] items-end gap-1.5 overflow-x-auto rounded-[22px] border border-separator px-2.5 py-2 shadow-[var(--shadow)] sm:gap-2.5 sm:px-3">
+        <div className="glass pointer-events-auto mx-auto flex w-fit max-w-[calc(100%-12px)] items-end gap-1.5 overflow-x-auto rounded-[14px] border border-separator px-2.5 py-2 sm:gap-2.5 sm:px-3">
           {!director && (
             <>
               <Key label={self.muted ? "Ligar micro (M)" : "Desligar micro (M)"} pressed={self.muted} onClick={() => studio.setMuted(!self.muted)}>

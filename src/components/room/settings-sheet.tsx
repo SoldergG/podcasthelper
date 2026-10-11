@@ -182,7 +182,7 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center" role="dialog" aria-modal="true" aria-label={title}>
       <button aria-label="Fechar" className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative max-h-[88vh] w-full max-w-lg overflow-y-auto rounded-t-[24px] bg-elevated p-5 pb-[max(20px,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-[24px] sm:p-6">
+      <div className="relative max-h-[88vh] w-full max-w-lg overflow-y-auto rounded-t-[16px] bg-elevated p-5 pb-[max(20px,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-[16px] sm:p-6">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-[20px] font-semibold">{title}</h2>
           <button onClick={onClose} aria-label="Fechar" className="grid h-9 w-9 place-items-center rounded-full bg-fill text-label-2 hover:bg-fill-strong">

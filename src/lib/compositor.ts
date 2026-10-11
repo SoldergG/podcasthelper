@@ -25,6 +25,14 @@ interface Rect {
 function gridRects(n: number, W: number, H: number, gap: number): Rect[] {
   if (n <= 0) return [];
   if (n === 1) return [{ x: 0, y: 0, w: W, h: H }];
+  if (H > W * 1.1) {
+    // Vertical video: stack people on top of each other.
+    const cols = n <= 3 ? 1 : 2;
+    const rows = Math.ceil(n / cols);
+    const cw = (W - gap * (cols + 1)) / cols;
+    const ch = (H - gap * (rows + 1)) / rows;
+    return Array.from({ length: n }, (_, i) => ({ x: gap + (i % cols) * (cw + gap), y: gap + Math.floor(i / cols) * (ch + gap), w: cw, h: ch }));
+  }
   const cols = n <= 2 ? 2 : n <= 4 ? 2 : n <= 6 ? 3 : 4;
   const rows = Math.ceil(n / cols);
   const cw = (W - gap * (cols + 1)) / cols;
@@ -63,7 +71,7 @@ export class Compositor {
     public height: number,
   ) {}
 
-  draw(inputs: CompositorInput[], srcMs: number, layout: Layout, nowMs = performance.now()) {
+  draw(inputs: CompositorInput[], srcMs: number, layout: Layout, nowMs = performance.now(), caption?: string | null) {
     const { ctx, width: W, height: H } = this;
     ctx.save();
     ctx.fillStyle = "#121214";
@@ -104,6 +112,40 @@ export class Compositor {
       const rects = gridRects(inputs.length, W, H, gap);
       inputs.forEach((inp, i) => this.drawTile(inp, rects[i], inputs.length === 1 ? 0 : radius, srcMs, false));
     }
+    ctx.restore();
+    if (caption) this.drawCaption(caption);
+  }
+
+  private drawCaption(text: string) {
+    const { ctx, width: W, height: H } = this;
+    const fs = Math.round(Math.min(W, H) * 0.045);
+    ctx.save();
+    ctx.font = `600 ${fs}px -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif`;
+    const maxW = W * 0.84;
+    const words = text.split(/\s+/);
+    const lines: string[] = [];
+    let line = "";
+    for (const w of words) {
+      const test = line ? `${line} ${w}` : w;
+      if (ctx.measureText(test).width > maxW && line) {
+        lines.push(line);
+        line = w;
+      } else line = test;
+    }
+    if (line) lines.push(line);
+    const shown = lines.slice(-2);
+    const lh = fs * 1.3;
+    const boxH = shown.length * lh + fs * 0.8;
+    const y0 = H - boxH - H * 0.06;
+    const boxW = Math.min(W * 0.9, Math.max(...shown.map((l) => ctx.measureText(l).width)) + fs * 1.4);
+    ctx.fillStyle = "rgba(0,0,0,0.72)";
+    ctx.beginPath();
+    ctx.roundRect((W - boxW) / 2, y0, boxW, boxH, fs * 0.4);
+    ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    shown.forEach((l, i) => ctx.fillText(l, W / 2, y0 + fs * 0.4 + i * lh));
     ctx.restore();
   }
 
@@ -162,7 +204,7 @@ export class Compositor {
     const fs = Math.max(12, Math.round((big ? this.width : r.w) * (big ? 0.016 : 0.045)));
     ctx.save();
     ctx.font = `600 ${fs}px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif`;
-    const label = inp.participant.name;
+    const label = inp.edit.subtitle ? `${inp.participant.name} · ${inp.edit.subtitle}` : inp.participant.name;
     const tw = ctx.measureText(label).width;
     const pad = fs * 0.6;
     const bx = r.x + fs * 0.8;

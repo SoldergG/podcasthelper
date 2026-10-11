@@ -65,7 +65,7 @@ export function Key({
 }
 
 export function Panel({ className = "", children }: { className?: string; children: ReactNode }) {
-  return <div className={`console rounded-[18px] border border-separator shadow-[var(--shadow)] ${className}`}>{children}</div>;
+  return <div className={`console rounded-[14px] border border-separator ${className}`}>{children}</div>;
 }
 
 /** Back-compat alias used across screens. */

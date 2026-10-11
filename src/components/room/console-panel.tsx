@@ -62,7 +62,9 @@ function Strip({
   return (
     <div className="rounded-[14px] border border-separator bg-elevated p-3">
       <div className="flex items-center gap-2.5">
-        <span className="h-8 w-1.5 shrink-0 rounded-full" style={{ background: info.color }} />
+        <span aria-hidden className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-[13px] font-semibold text-white" style={{ background: info.color }}>
+          {(info.name || "?").trim().charAt(0).toUpperCase()}
+        </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 text-[15px] font-semibold">
             <span className="truncate">{info.name}</span>

@@ -8,7 +8,7 @@ import { newRoomCode, normalizeRoomCode } from "@/lib/util";
 import { Button, inputClass } from "./ui";
 
 /** Create a room or join one by code. */
-export function StartActions({ size = "lg" }: { size?: "md" | "lg" }) {
+export function StartActions({ size = "lg", onAccent = false }: { size?: "md" | "lg"; onAccent?: boolean }) {
   const router = useRouter();
   const [joining, setJoining] = useState(false);
   const [code, setCode] = useState("");
@@ -33,18 +33,18 @@ export function StartActions({ size = "lg" }: { size?: "md" | "lg" }) {
   return (
     <div>
       <div className="flex flex-wrap gap-3">
-        <Button variant="accent" size={size} onClick={create}>
+        <Button variant={onAccent ? "primary" : "accent"} size={size} onClick={create}>
           Criar sala
         </Button>
         {!joining && (
-          <Button variant="secondary" size={size} onClick={() => setJoining(true)}>
+          <Button variant="secondary" size={size} className={onAccent ? "!bg-black/10 !text-on-accent hover:!bg-black/15" : ""} onClick={() => setJoining(true)}>
             Entrar com código
           </Button>
         )}
       </div>
       {joining && (
         <form onSubmit={join} className="mt-4 max-w-md">
-          <label htmlFor="room-code" className="mb-2 block text-[13px] font-medium text-label-2">
+          <label htmlFor="room-code" className={`mb-2 block text-[13px] font-medium ${onAccent ? "text-on-accent" : "text-label-2"}`}>
             Código ou link da sala
           </label>
           <div className="flex gap-2">
@@ -66,7 +66,7 @@ export function StartActions({ size = "lg" }: { size?: "md" | "lg" }) {
               <ArrowRight className="h-4 w-4" />
             </Button>
           </div>
-          {error && <p className="mt-2 text-[13px] text-red">{error}</p>}
+          {error && <p className={`mt-2 text-[13px] ${onAccent ? "font-medium text-on-accent" : "text-red"}`}>{error}</p>}
         </form>
       )}
     </div>

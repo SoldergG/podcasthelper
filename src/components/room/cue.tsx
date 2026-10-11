@@ -2,6 +2,7 @@
 
 import { Megaphone } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Studio, StudioSnapshot } from "@/lib/studio";
 
 export const CUE_PRESETS = [
@@ -18,13 +19,28 @@ export const CUE_PRESETS = [
 export function CueMenu({ studio, to, label, compact = false }: { studio: Studio; to: string; label: string; compact?: boolean }) {
   const [open, setOpen] = useState(false);
   const [custom, setCustom] = useState("");
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
-    const onDown = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Node;
+      if (!ref.current?.contains(t) && !menuRef.current?.contains(t)) setOpen(false);
+    };
+    const close = () => setOpen(false);
     window.addEventListener("pointerdown", onDown);
-    return () => window.removeEventListener("pointerdown", onDown);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("resize", close);
+    };
   }, [open]);
+  const toggle = () => {
+    const r = ref.current?.getBoundingClientRect();
+    if (r) setPos({ top: Math.min(r.bottom + 8, window.innerHeight - 420), right: Math.max(8, window.innerWidth - r.right) });
+    setOpen(!open);
+  };
   const send = (text: string) => {
     if (!text.trim()) return;
     studio.sendCue(to, text.trim());
@@ -34,7 +50,7 @@ export function CueMenu({ studio, to, label, compact = false }: { studio: Studio
   return (
     <div ref={ref} className="relative">
       <button
-        onClick={() => setOpen(!open)}
+        onClick={toggle}
         aria-expanded={open}
         aria-label={label}
         title={label}
@@ -43,8 +59,8 @@ export function CueMenu({ studio, to, label, compact = false }: { studio: Studio
         <Megaphone className="h-4 w-4" />
         {!compact && "Sinal para todos"}
       </button>
-      {open && (
-        <div role="menu" className="absolute right-0 z-40 mt-2 w-64 rounded-[14px] border border-separator bg-elevated p-1.5 shadow-[var(--shadow)]">
+      {open && pos && createPortal(
+        <div ref={menuRef} role="menu" style={{ position: "fixed", top: pos.top, right: pos.right }} className="z-[60] w-64 rounded-[14px] bg-elevated p-1.5 shadow-[0_2px_8px_rgba(20,20,30,0.18)] ring-1 ring-separator">
           {CUE_PRESETS.map((c) => (
             <button key={c} role="menuitem" onClick={() => send(c)} className="block w-full rounded-[9px] px-3 py-2 text-left text-[14px] hover:bg-fill">
               {c}
@@ -71,7 +87,8 @@ export function CueMenu({ studio, to, label, compact = false }: { studio: Studio
               Enviar
             </button>
           </form>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

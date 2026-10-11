@@ -13,7 +13,16 @@ import { Button, ProgressBar, Segmented, Toggle } from "../ui";
 
 type Job = { label: string; fraction: number } | null;
 
-export function ExportPanel({ ep, beforeExport }: { ep: Episode; beforeExport: () => Promise<Episode> }) {
+export function ExportPanel({
+  ep,
+  beforeExport,
+  selection,
+}: {
+  ep: Episode;
+  beforeExport: () => Promise<Episode>;
+  /** Current timeline selection (episode ms), for clip export. */
+  selection?: { start: number; end: number } | null;
+}) {
   const [job, setJob] = useState<Job>(null);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -26,6 +35,17 @@ export function ExportPanel({ ep, beforeExport }: { ep: Episode; beforeExport: (
   const [audioFmt, setAudioFmt] = useState<"mp3" | "wav">("mp3");
   const [layout, setLayout] = useState<Layout>("grid");
   const [res, setRes] = useState<"720" | "1080">("1080");
+  const [aspect, setAspect] = useState<"16:9" | "9:16" | "1:1">("16:9");
+  const [captions, setCaptions] = useState(false);
+  const [clipOnly, setClipOnly] = useState(false);
+  const hasTranscript = (ep.transcript?.length || 0) > 0;
+  const clip = clipOnly && selection && selection.end - selection.start > 500 ? selection : null;
+  /** The episode limited to the selection, when exporting a clip. */
+  const scoped = (e: Episode): Episode => {
+    if (!clip) return e;
+    const edits = e.edits || { trimStart: 0, trimEnd: null, cuts: [], tracks: {}, loudness: true };
+    return { ...e, edits: { ...edits, trimStart: clip.start, trimEnd: clip.end } };
+  };
 
   const base = slugify(ep.title);
   const hasVideo = ep.tracks.some((t) => t.kind === "video" && t.complete);
@@ -74,7 +94,17 @@ export function ExportPanel({ ep, beforeExport }: { ep: Episode; beforeExport: (
       {result && <p className="rounded-[12px] bg-[color-mix(in_srgb,var(--green-bright)_14%,transparent)] px-3 py-2 text-[13px] text-green">{result}</p>}
       {error && <p className="rounded-[12px] bg-red-soft px-3 py-2 text-[13px] text-red">{error}</p>}
 
-      <section className="rounded-[18px] bg-grouped p-4">
+      <div className="rounded-[12px] bg-grouped px-4 py-1">
+        <Toggle
+          label="Só a seleção (clip)"
+          hint={selection && selection.end - selection.start > 500 ? "Áudio e vídeo só com a parte selecionada na linha do tempo." : "Arrasta na linha do tempo para selecionar um trecho."}
+          checked={!!clip}
+          disabled={!selection || selection.end - selection.start <= 500}
+          onChange={setClipOnly}
+        />
+      </div>
+
+      <section className="rounded-[14px] bg-grouped p-4">
         <h3 className="flex items-center gap-2 text-[16px] font-semibold">
           <FileArchive className="h-4 w-4 text-accent-ink" /> Pacote completo (ZIP)
         </h3>
@@ -106,7 +136,7 @@ export function ExportPanel({ ep, beforeExport }: { ep: Episode; beforeExport: (
         </Button>
       </section>
 
-      <section className="rounded-[18px] bg-grouped p-4">
+      <section className="rounded-[14px] bg-grouped p-4">
         <h3 className="flex items-center gap-2 text-[16px] font-semibold">
           <Music className="h-4 w-4 text-accent-ink" /> Áudio final
         </h3>
@@ -119,8 +149,8 @@ export function ExportPanel({ ep, beforeExport }: { ep: Episode; beforeExport: (
           disabled={!!job}
           onClick={() =>
             run("A misturar…", async (signal, latest) => ({
-              blob: await mixdown(latest, { applyEdits: true, format: audioFmt, signal, onProgress: (f) => setJob({ label: `A misturar… ${Math.round(f * 100)}%`, fraction: f }) }),
-              name: `${base}.${audioFmt}`,
+              blob: await mixdown(scoped(latest), { applyEdits: true, format: audioFmt, signal, onProgress: (f) => setJob({ label: `A misturar… ${Math.round(f * 100)}%`, fraction: f }) }),
+              name: `${base}${clip ? "-clip" : ""}.${audioFmt}`,
             }))
           }
         >
@@ -128,7 +158,7 @@ export function ExportPanel({ ep, beforeExport }: { ep: Episode; beforeExport: (
         </Button>
       </section>
 
-      <section className="rounded-[18px] bg-grouped p-4">
+      <section className="rounded-[14px] bg-grouped p-4">
         <h3 className="flex items-center gap-2 text-[16px] font-semibold">
           <Film className="h-4 w-4 text-accent-ink" /> Vídeo final
         </h3>
@@ -138,21 +168,35 @@ export function ExportPanel({ ep, beforeExport }: { ep: Episode; beforeExport: (
         <div className="mt-3 space-y-2">
           <Segmented label="Disposição" value={layout} onChange={setLayout} options={[{ value: "grid", label: "Grelha" }, { value: "speaker", label: "Quem fala em destaque" }]} />
           <Segmented label="Resolução" value={res} onChange={setRes} options={[{ value: "720", label: "720p" }, { value: "1080", label: "1080p" }]} />
+          <Segmented
+            label="Formato"
+            value={aspect}
+            onChange={setAspect}
+            options={[
+              { value: "16:9", label: "16:9 YouTube" },
+              { value: "9:16", label: "9:16 Reels" },
+              { value: "1:1", label: "1:1" },
+            ]}
+          />
+          <Toggle label="Legendas no vídeo" hint={hasTranscript ? "A partir da transcrição." : "Precisa de transcrição (liga-a na sala)."} checked={captions && hasTranscript} disabled={!hasTranscript} onChange={setCaptions} />
         </div>
         <Button
           className="mt-3 w-full"
           disabled={!!job}
           onClick={() =>
             run("A preparar o vídeo…", async (signal, latest) => {
-              const blob = await renderVideo(latest, {
+              const blob = await renderVideo(scoped(latest), {
                 layout,
                 height: res === "1080" ? 1080 : 720,
                 fps: 30,
+                aspect,
+                captions: captions && hasTranscript,
                 signal,
                 onProgress: (phase, f) =>
                   setJob(phase === "audio" ? { label: `A preparar o áudio… ${Math.round(f * 100)}%`, fraction: f * 0.15 } : { label: `A gravar o vídeo… ${Math.round(f * 100)}%`, fraction: 0.15 + f * 0.85 }),
               });
-              return { blob, name: `${base}.${blob.type.includes("mp4") ? "mp4" : "webm"}` };
+              const suffix = `${clip ? "-clip" : ""}${aspect === "9:16" ? "-vertical" : aspect === "1:1" ? "-quadrado" : ""}`;
+              return { blob, name: `${base}${suffix}.${blob.type.includes("mp4") ? "mp4" : "webm"}` };
             })
           }
         >

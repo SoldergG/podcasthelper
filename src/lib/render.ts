@@ -4,12 +4,15 @@ import { Compositor, type CompositorInput, type Layout } from "./compositor";
 import { mixdown, speakerActivity } from "./mix";
 import { buildSegments, editsOf, outToSrc, trackEdit } from "./timeline";
 import { trackBlob } from "./tracks";
-import { trackOffsetMs, type Episode } from "./types";
+import { hostToEp, trackOffsetMs, type Episode } from "./types";
 
 export interface RenderOptions {
   layout: Layout;
   height: 720 | 1080;
   fps: 30;
+  aspect?: "16:9" | "9:16" | "1:1";
+  /** Burn the transcript in as captions. */
+  captions?: boolean;
   onProgress?: (phase: "audio" | "video", fraction: number) => void;
   signal?: AbortSignal;
 }
@@ -58,8 +61,16 @@ export async function renderVideo(ep: Episode, opts: RenderOptions): Promise<Blo
   }
   if (!inputs.length) throw new Error("Não há ninguém para mostrar no vídeo.");
 
-  const H = opts.height;
-  const W = Math.round((H * 16) / 9);
+  const base = opts.height;
+  const aspect = opts.aspect || "16:9";
+  const W = aspect === "16:9" ? Math.round((base * 16) / 9) : base;
+  const H = aspect === "9:16" ? Math.round((base * 16) / 9) : base;
+  const lines = (ep.transcript || []).map((l, i, all) => {
+    const ms = hostToEp(ep, l.t);
+    const next = all[i + 1];
+    return { ms, end: next ? Math.min(hostToEp(ep, next.t), ms + 7000) : ms + 5000, text: l.text };
+  });
+  const captionAt = (srcMs: number) => (opts.captions ? lines.find((l) => srcMs >= l.ms && srcMs < l.end)?.text ?? null : null);
   const canvas = document.createElement("canvas");
   canvas.width = W;
   canvas.height = H;
@@ -85,7 +96,7 @@ export async function renderVideo(ep: Episode, opts: RenderOptions): Promise<Blo
   const mime = pickOutputMime();
   const rec = new MediaRecorder(stream, {
     mimeType: mime || undefined,
-    videoBitsPerSecond: H >= 1080 ? 8_000_000 : 5_000_000,
+    videoBitsPerSecond: Math.max(W, H) >= 1900 ? 8_000_000 : 5_000_000,
     audioBitsPerSecond: 192_000,
   });
   const chunks: Blob[] = [];
@@ -110,7 +121,7 @@ export async function renderVideo(ep: Episode, opts: RenderOptions): Promise<Blo
         } else if (!v.paused) v.pause();
       }
     }
-    comp.draw(inputs, srcMs, opts.layout);
+    comp.draw(inputs, srcMs, opts.layout, performance.now(), captionAt(srcMs));
   };
 
   // Prime the first frame.

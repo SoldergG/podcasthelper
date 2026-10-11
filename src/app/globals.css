@@ -4,7 +4,8 @@
   PodcastHelper visual language: a light "studio console".
   Aluminium greys, one signal-orange accent (with dark text on it, like hardware
   labels), segmented LED meters and mono timecode. Shape rule: text buttons are
-  pills, transport keys are 14px rounded squares, panels 18px, inputs 12px.
+  pills, transport keys are 14px rounded squares, panels and tiles 14px,
+  inputs 12px. Panels use a border OR a shadow, never both.
 */
 :root {
   --bg: #e9e9ec;
@@ -28,8 +29,8 @@
   --green-bright: #2fbf71;
   --orange: #a84a00;
   --amber: #f2b300;
-  --shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 1px 2px rgba(20, 20, 30, 0.06), 0 10px 30px rgba(20, 20, 30, 0.07);
-  --key-shadow: 0 1px 0 rgba(255, 255, 255, 0.95) inset, 0 -1px 0 rgba(20, 20, 30, 0.06) inset, 0 2px 3px rgba(20, 20, 30, 0.12), 0 8px 18px rgba(20, 20, 30, 0.08);
+  --shadow: 0 1px 2px rgba(20, 20, 30, 0.08), 0 4px 8px rgba(20, 20, 30, 0.05);
+  --key-shadow: 0 1px 0 rgba(255, 255, 255, 0.95) inset, 0 -1px 0 rgba(20, 20, 30, 0.06) inset, 0 1px 2px rgba(20, 20, 30, 0.14), 0 3px 8px rgba(20, 20, 30, 0.08);
   --glass: rgba(246, 246, 248, 0.78);
   --led-off: rgba(28, 28, 34, 0.09);
   color-scheme: light;
@@ -58,8 +59,8 @@
     --green-bright: #44d98a;
     --orange: #ffad5c;
     --amber: #ffc935;
-    --shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 10px 30px rgba(0, 0, 0, 0.45);
-    --key-shadow: 0 1px 0 rgba(255, 255, 255, 0.07) inset, 0 2px 4px rgba(0, 0, 0, 0.5), 0 8px 18px rgba(0, 0, 0, 0.35);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 4px 8px rgba(0, 0, 0, 0.3);
+    --key-shadow: 0 1px 0 rgba(255, 255, 255, 0.07) inset, 0 1px 2px rgba(0, 0, 0, 0.6), 0 3px 8px rgba(0, 0, 0, 0.35);
     --glass: rgba(22, 22, 26, 0.78);
     --led-off: rgba(235, 235, 245, 0.08);
     color-scheme: dark;
@@ -90,10 +91,21 @@
   --color-amber: var(--amber);
   --font-sans: var(--font-geist), -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, monospace;
+  --font-display: var(--font-archivo), var(--font-geist), sans-serif;
 }
 
 html {
   -webkit-text-size-adjust: 100%;
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+
+p {
+  text-wrap: pretty;
 }
 
 body {
@@ -128,6 +140,15 @@ body {
 
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+/* Marketing display type: wide and heavy, letter-spacing stays above -0.04em. */
+.display {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-variation-settings: "wdth" 112;
+  letter-spacing: -0.03em;
+  line-height: 0.98;
 }
 
 /* Hardware key: a rounded square that physically presses. */
@@ -215,6 +236,21 @@ input[type="range"]::-moz-range-thumb {
 }
 .rise {
   animation: rise 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Scroll-linked reveal: visible by default, only animated where supported. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .reveal {
+      animation: reveal-in linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 30%;
+    }
+  }
+}
+@keyframes reveal-in {
+  from { opacity: 0.4; transform: translateY(32px) scale(0.97); }
+  to { opacity: 1; transform: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

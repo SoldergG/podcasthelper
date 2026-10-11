@@ -9,7 +9,7 @@ import { recoverTrack } from "./tracks";
 import { FileReceiver, FileSender, type TransferProgress } from "./transfer";
 import { LiveTranscriber, speechSupported } from "./transcribe";
 import { pausedBefore, type Episode, type Marker, type Participant, type Pause, type TrackMeta, type TranscriptLine } from "./types";
-import { nowMs, randomId } from "./util";
+import { nowMs, PERSON_COLORS, randomId } from "./util";
 
 export type RecState = "idle" | "countdown" | "recording" | "paused" | "finalizing";
 
@@ -280,6 +280,19 @@ export class Studio {
   }
 
   // ---------- peers ----------
+  /** Two people must never share a color: the later arrival picks a free one. */
+  private ensureUniqueColor() {
+    const self = this.snap.self;
+    if (!self || !this.room) return;
+    const clash = this.snap.peers.some((p) => p.info.color === self.color && (p.info.joinedAt < self.joinedAt || (p.info.joinedAt === self.joinedAt && p.info.peerId < self.peerId)));
+    if (!clash) return;
+    const used = new Set(this.snap.peers.map((p) => p.info.color));
+    const free = PERSON_COLORS.find((c) => !used.has(c));
+    if (!free) return;
+    this.room.updateSelf({ color: free });
+    this.set({ self: { ...self, color: free } });
+  }
+
   private onPeers(list: PeerState[]) {
     this.set({
       peers: list.map((p) => ({
@@ -291,6 +304,7 @@ export class Studio {
       })),
     });
     this.recomputeMaster();
+    this.ensureUniqueColor();
   }
 
   private recomputeMaster() {

@@ -111,7 +111,7 @@ export function TrackPanel({
   return (
     <div className="space-y-6">
       <section>
-        <h3 className="mb-2 text-[13px] font-semibold uppercase tracking-wide text-label-3">Som</h3>
+        <h3 className="mb-2 text-[13px] font-semibold text-label-2">Som</h3>
         <Slider label="Volume" value={te.gain} min={0} max={2} step={0.01} format={(v) => `${v >= 1 ? "+" : ""}${(20 * Math.log10(Math.max(0.001, v))).toFixed(1)} dB`} onChange={(v) => onChange({ gain: v })} />
         <div className="mt-2 rounded-[14px] bg-grouped px-4 py-1">
           <Toggle label="Silenciar" checked={te.muted} onChange={(v) => onChange({ muted: v })} />
@@ -121,7 +121,37 @@ export function TrackPanel({
       </section>
 
       <section>
-        <h3 className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold uppercase tracking-wide text-label-3">
+        <h3 className="mb-2 text-[13px] font-semibold text-label-2">Sincronia</h3>
+        <Slider
+          label="Mover esta pessoa"
+          value={te.offsetMs}
+          min={-500}
+          max={500}
+          step={5}
+          format={(v) => `${v > 0 ? "+" : ""}${v} ms`}
+          onChange={(v) => onChange({ offsetMs: v })}
+        />
+        {video && (
+          <Slider
+            label="Só o vídeo (lábios)"
+            value={te.videoOffsetMs}
+            min={-500}
+            max={500}
+            step={5}
+            format={(v) => `${v > 0 ? "+" : ""}${v} ms`}
+            onChange={(v) => onChange({ videoOffsetMs: v })}
+          />
+        )}
+        <p className="mt-1 text-[12px] text-label-3">Normalmente fica em 0. Usa se alguém parecer adiantado ou atrasado (por exemplo, fones Bluetooth).</p>
+        {(te.offsetMs !== 0 || te.videoOffsetMs !== 0) && (
+          <Button variant="plain" size="sm" className="mt-1" onClick={() => onChange({ offsetMs: 0, videoOffsetMs: 0 })}>
+            Repor sincronia
+          </Button>
+        )}
+      </section>
+
+      <section>
+        <h3 className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-label-2">
           <Sparkles className="h-3.5 w-3.5" /> Limpeza de áudio
         </h3>
         {!audio ? (
@@ -167,7 +197,17 @@ export function TrackPanel({
 
       {video && (
         <section>
-          <h3 className="mb-2 text-[13px] font-semibold uppercase tracking-wide text-label-3">Imagem</h3>
+          <h3 className="mb-2 text-[13px] font-semibold text-label-2">Imagem</h3>
+          <label className="mb-3 block">
+            <span className="mb-1.5 block text-[14px]">Subtítulo no vídeo</span>
+            <input
+              value={te.subtitle}
+              onChange={(e) => onChange({ subtitle: e.target.value })}
+              placeholder="Ex.: Produtora musical"
+              maxLength={40}
+              className="h-10 w-full rounded-[10px] border border-separator bg-elevated px-3 text-[15px] outline-none focus:border-accent"
+            />
+          </label>
           <div className="space-y-2">
             <Slider label="Brilho" value={te.brightness} min={0.5} max={1.5} step={0.01} format={(v) => `${Math.round((v - 1) * 100)}`} onChange={(v) => onChange({ brightness: v })} />
             <Slider label="Contraste" value={te.contrast} min={0.5} max={1.5} step={0.01} format={(v) => `${Math.round((v - 1) * 100)}`} onChange={(v) => onChange({ contrast: v })} />

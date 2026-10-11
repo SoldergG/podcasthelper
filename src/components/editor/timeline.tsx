@@ -258,7 +258,7 @@ export function Timeline({
   };
 
   return (
-    <div className="rounded-[18px] bg-elevated shadow-[var(--shadow)]">
+    <div className="rounded-[14px] bg-elevated shadow-[var(--shadow)]">
       <div className="flex">
         {/* Labels */}
         <div className="shrink-0 border-r border-separator" style={{ width: LABEL_W }}>

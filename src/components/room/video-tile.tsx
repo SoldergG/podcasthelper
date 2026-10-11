@@ -81,7 +81,7 @@ export function VideoTile({
   const connecting = !isSelf && connection && connection !== "connected";
 
   return (
-    <div className="relative aspect-video w-full overflow-hidden rounded-[18px] bg-[#1b1b1f] shadow-[var(--shadow)]">
+    <div style={{ containerType: "size" }} className="relative aspect-video w-full overflow-hidden rounded-[14px] bg-[#1b1b1f] shadow-[var(--shadow)]">
       <video
         ref={videoRef}
         autoPlay
@@ -92,7 +92,7 @@ export function VideoTile({
       />
       {!hasVideo && (
         <div className="absolute inset-0 grid place-items-center bg-[#1b1b1f]">
-          <div className="grid h-20 w-20 place-items-center rounded-full text-[32px] font-semibold text-white sm:h-24 sm:w-24" style={{ background: color }}>
+          <div className="grid aspect-square h-[34%] place-items-center rounded-full font-semibold text-white" style={{ background: color, fontSize: "clamp(14px, 15cqh, 44px)" }}>
             {(name || "?").trim().charAt(0).toUpperCase()}
           </div>
         </div>
@@ -100,11 +100,11 @@ export function VideoTile({
       <div
         ref={ringRef}
         aria-hidden
-        className="pointer-events-none absolute inset-0 rounded-[18px] opacity-0 transition-opacity duration-150"
+        className="pointer-events-none absolute inset-0 rounded-[14px] opacity-0 transition-opacity duration-150"
         style={{ boxShadow: "inset 0 0 0 3px var(--green-bright)" }}
       />
-      <div className="absolute bottom-2.5 left-2.5 flex max-w-[calc(100%-20px)] items-center gap-1.5 rounded-[10px] bg-black/60 py-1 pr-2.5 pl-1.5 text-[13px] font-medium text-white backdrop-blur-md">
-        <span className="h-4 w-1 shrink-0 rounded-full" style={{ background: color }} />
+      <div className="absolute bottom-2.5 left-2.5 flex max-w-[calc(100%-20px)] items-center gap-1.5 rounded-[10px] bg-black/60 py-1 pr-2.5 pl-2 text-[13px] font-medium text-white backdrop-blur-md">
+        <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: color }} />
         <span className="truncate">
           {name}
           {isSelf ? " (tu)" : ""}

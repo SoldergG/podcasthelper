@@ -58,12 +58,13 @@ export function ChatPanel({ studio, snap }: { studio: Studio; snap: StudioSnapsh
           const mine = m.from === snap.self?.peerId;
           return (
             <li key={m.id} className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
-              <span className="mb-0.5 text-[11px] text-label-3">
-                {mine ? "Tu" : m.name} · {new Date(m.at).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}
+              <span className="mb-0.5 flex items-center gap-1.5 text-[11px] text-label-3">
+                {!mine && <span className="h-1.5 w-1.5 rounded-full" style={{ background: m.color }} />}
+                <span className={mine ? "" : "font-medium text-label-2"}>{mine ? "Tu" : m.name}</span>
+                {new Date(m.at).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}
               </span>
               <span
                 className={`max-w-[85%] whitespace-pre-wrap break-words rounded-[16px] px-3 py-2 text-[14px] ${mine ? "bg-label text-bg" : "bg-elevated border border-separator"}`}
-                style={!mine ? { borderLeft: `3px solid ${m.color}` } : undefined}
               >
                 {m.text}
               </span>

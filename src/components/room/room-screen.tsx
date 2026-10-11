@@ -10,6 +10,7 @@ import { colorFor, normalizeRoomCode } from "@/lib/util";
 import { Button, Header, Panel, Segmented, inputClass } from "../ui";
 import { ChecksPanel } from "./checks-panel";
 import { InRoom } from "./in-room";
+import { LobbyMeter } from "./lobby-meter";
 import { SettingsPanel } from "./settings-sheet";
 import { VideoTile } from "./video-tile";
 
@@ -172,6 +173,7 @@ function Lobby({ studio, code }: { studio: Studio; code: string }) {
               ctx={null}
             />
           )}
+          {!director && !previewError && <LobbyMeter stream={snap.localStream} />}
           {previewError && !director && <p className="rounded-[12px] bg-red-soft px-3.5 py-2.5 text-[14px] text-red">{previewError}</p>}
           {!director && (
             <Panel className="p-5">
@@ -226,10 +228,21 @@ function Lobby({ studio, code }: { studio: Studio; code: string }) {
             {snap.error && <p className="mt-3 text-[14px] text-red">{snap.error}</p>}
           </Panel>
           {!director && (
-            <Panel className="p-5">
-              <h2 className="mb-4 text-[17px] font-semibold">Micro e câmara</h2>
-              <SettingsPanel settings={settings} onChange={setSettings} stream={snap.localStream} locked={false} />
-            </Panel>
+            <details className="group rounded-[14px] border border-separator bg-panel">
+              <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-5 py-3 [&::-webkit-details-marker]:hidden">
+                <span>
+                  <span className="block text-[16px] font-semibold">Micro e câmara</span>
+                  <span className="block text-[13px] text-label-3">
+                    {settings.headphones ? "Com fones" : "Sem fones"} · {settings.videoEnabled ? `câmara ${settings.resolution === "max" ? "na qualidade máxima" : `${settings.resolution}p`}` : "sem câmara"}
+                  </span>
+                </span>
+                <span className="text-[14px] font-medium text-accent-ink group-open:hidden">Ajustar</span>
+                <span className="hidden text-[14px] font-medium text-accent-ink group-open:inline">Fechar</span>
+              </summary>
+              <div className="border-t border-separator p-5">
+                <SettingsPanel settings={settings} onChange={setSettings} stream={snap.localStream} locked={false} />
+              </div>
+            </details>
           )}
         </div>
       </main>
